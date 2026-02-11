@@ -98,5 +98,18 @@ export default () => ({
             type: 'content-api',
             routes,
         },
+        admin: {
+            type: 'admin',
+            routes: [
+                {
+                    method: 'GET',
+                    path: '/schema',
+                    handler: 'schema.getSchema',
+                    config: {
+                        policies: [],
+                    },
+                },
+            ],
+        },
     },
 })

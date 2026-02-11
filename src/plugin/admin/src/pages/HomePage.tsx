@@ -1,5 +1,8 @@
 import { useState, useEffect } from 'react'
 import { PLUGIN_ID } from '../pluginId'
+
+// @ts-expect-error – available at runtime inside Strapi admin
+import { useFetchClient } from '@strapi/strapi/admin'
 import {
     Main,
     Box,
@@ -30,15 +33,15 @@ export default function HomePage() {
     const [expandedEndpoints, setExpandedEndpoints] = useState<Set<string>>(
         new Set(),
     )
+    const { get } = useFetchClient()
 
     useEffect(() => {
-        fetch(`/api/${PLUGIN_ID}/schema`)
-            .then(res => res.json())
-            .then(json => {
-                setData(json)
+        get(`/${PLUGIN_ID}/schema`)
+            .then((res: any) => {
+                setData(res.data)
                 setLoading(false)
             })
-            .catch(err => {
+            .catch((err: any) => {
                 setError(err.message)
                 setLoading(false)
             })
