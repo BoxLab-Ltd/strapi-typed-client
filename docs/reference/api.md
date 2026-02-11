@@ -487,14 +487,16 @@ interface NextOptions {
     revalidate?: number | false
     tags?: string[]
     cache?: RequestCache
+    headers?: Record<string, string | undefined>
 }
 ```
 
-| Property     | Type              | Description                                                     |
-| ------------ | ----------------- | --------------------------------------------------------------- |
-| `revalidate` | `number \| false` | ISR revalidation period in seconds, or `false` to disable       |
-| `tags`       | `string[]`        | Cache tags for on-demand revalidation via `revalidateTag()`     |
-| `cache`      | `RequestCache`    | Standard fetch cache mode (`'no-store'`, `'force-cache'`, etc.) |
+| Property     | Type                                  | Description                                                     |
+| ------------ | ------------------------------------- | --------------------------------------------------------------- |
+| `revalidate` | `number \| false`                     | ISR revalidation period in seconds, or `false` to disable       |
+| `tags`       | `string[]`                            | Cache tags for on-demand revalidation via `revalidateTag()`     |
+| `cache`      | `RequestCache`                        | Standard fetch cache mode (`'no-store'`, `'force-cache'`, etc.) |
+| `headers`    | `Record<string, string \| undefined>` | Custom HTTP headers to merge into the request                   |
 
 ```ts
 // ISR: revalidate every hour
@@ -506,6 +508,9 @@ await strapi.articles.find({}, { tags: ['articles'] })
 // No caching
 await strapi.articles.find({}, { cache: 'no-store' })
 
+// Custom headers (e.g. pass Referer for server-side requests)
+await strapi.articles.find({}, { headers: { Referer: 'https://myapp.com' } })
+
 // Combine options
 await strapi.articles.find(
     { filters: { status: 'published' } },
@@ -514,7 +519,7 @@ await strapi.articles.find(
 ```
 
 ::: info
-`NextOptions` are passed through to the underlying `fetch` call as `{ next: { revalidate, tags }, cache }`. They only have an effect in a Next.js environment where `fetch` is patched. In other environments, they are safely ignored.
+`NextOptions` are passed through to the underlying `fetch` call as `{ next: { revalidate, tags }, cache }`. Custom `headers` are merged with the default headers (Content-Type, Authorization). These options work in any environment, not just Next.js.
 :::
 
 ## StrapiResponse

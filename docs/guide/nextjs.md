@@ -41,6 +41,7 @@ interface NextOptions {
     revalidate?: number | false
     tags?: string[]
     cache?: RequestCache
+    headers?: Record<string, string | undefined>
 }
 ```
 
