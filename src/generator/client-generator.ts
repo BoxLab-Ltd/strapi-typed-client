@@ -264,6 +264,17 @@ import qs from 'qs'`
         )
         lines.push('    }')
         lines.push('')
+        lines.push('    // Merge custom headers from nextOptions')
+        lines.push('    if (nextOptions?.headers) {')
+        lines.push(
+            '      for (const [key, value] of Object.entries(nextOptions.headers)) {',
+        )
+        lines.push('        if (value !== undefined) {')
+        lines.push('          headers[key] = value')
+        lines.push('        }')
+        lines.push('      }')
+        lines.push('    }')
+        lines.push('')
         lines.push('    const fetchOptions: RequestInit = {')
         lines.push('      ...options,')
         lines.push('      headers,')
@@ -361,6 +372,7 @@ import qs from 'qs'`
         lines.push('  revalidate?: number | false')
         lines.push('  tags?: string[]')
         lines.push('  cache?: RequestCache')
+        lines.push('  headers?: Record<string, string | undefined>')
         lines.push('}')
         lines.push('')
         lines.push('export interface StrapiClientConfig {')
@@ -443,6 +455,11 @@ class CollectionAPI<
     params: { populate: '*' | true } & QueryParams<TBase, TFilters, '*' | true, TFields>,
     nextOptions?: NextOptions
   ): Promise<SelectFields<GetPopulated<TBase, '*'>, TBase, TFields>[]>
+  // Overload: with populate array → populated return type
+  find<const TPopulate extends readonly (keyof TPopulateKeys & string)[], const TFields extends Exclude<keyof TBase & string, '__typename'> = never>(
+    params: { populate: TPopulate } & QueryParams<TBase, TFilters, TPopulate, TFields>,
+    nextOptions?: NextOptions
+  ): Promise<SelectFields<GetPopulated<TBase, TPopulate>, TBase, TFields>[]>
   // Overload: general case → base return type
   find<const TFields extends Exclude<keyof TBase & string, '__typename'> = never>(
     params?: QueryParams<TBase, TFilters, TPopulateKeys | (keyof TPopulateKeys & string)[] | '*' | boolean, TFields>,
@@ -466,6 +483,11 @@ class CollectionAPI<
     params: { populate: '*' | true } & QueryParams<TBase, TFilters, '*' | true, TFields>,
     nextOptions?: NextOptions
   ): Promise<StrapiResponse<SelectFields<GetPopulated<TBase, '*'>, TBase, TFields>[]>>
+  // Overload: with populate array → populated return type
+  findWithMeta<const TPopulate extends readonly (keyof TPopulateKeys & string)[], const TFields extends Exclude<keyof TBase & string, '__typename'> = never>(
+    params: { populate: TPopulate } & QueryParams<TBase, TFilters, TPopulate, TFields>,
+    nextOptions?: NextOptions
+  ): Promise<StrapiResponse<SelectFields<GetPopulated<TBase, TPopulate>, TBase, TFields>[]>>
   // Overload: general case → base return type
   findWithMeta<const TFields extends Exclude<keyof TBase & string, '__typename'> = never>(
     params?: QueryParams<TBase, TFilters, TPopulateKeys | (keyof TPopulateKeys & string)[] | '*' | boolean, TFields>,
@@ -490,6 +512,12 @@ class CollectionAPI<
     params: { populate: '*' | true } & QueryParams<TBase, TFilters, '*' | true, TFields>,
     nextOptions?: NextOptions
   ): Promise<SelectFields<GetPopulated<TBase, '*'>, TBase, TFields> | null>
+  // Overload: with populate array → populated return type
+  findOne<const TPopulate extends readonly (keyof TPopulateKeys & string)[], const TFields extends Exclude<keyof TBase & string, '__typename'> = never>(
+    documentId: string,
+    params: { populate: TPopulate } & QueryParams<TBase, TFilters, TPopulate, TFields>,
+    nextOptions?: NextOptions
+  ): Promise<SelectFields<GetPopulated<TBase, TPopulate>, TBase, TFields> | null>
   // Overload: general case → base return type
   findOne<const TFields extends Exclude<keyof TBase & string, '__typename'> = never>(
     documentId: string,
@@ -579,6 +607,11 @@ class SingleTypeAPI<
     params: { populate: '*' | true } & QueryParams<TBase, TFilters, '*' | true, TFields>,
     nextOptions?: NextOptions
   ): Promise<SelectFields<GetPopulated<TBase, '*'>, TBase, TFields>>
+  // Overload: with populate array → populated return type
+  find<const TPopulate extends readonly (keyof TPopulateKeys & string)[], const TFields extends Exclude<keyof TBase & string, '__typename'> = never>(
+    params: { populate: TPopulate } & QueryParams<TBase, TFilters, TPopulate, TFields>,
+    nextOptions?: NextOptions
+  ): Promise<SelectFields<GetPopulated<TBase, TPopulate>, TBase, TFields>>
   // Overload: general case → base return type
   find<const TFields extends Exclude<keyof TBase & string, '__typename'> = never>(
     params?: QueryParams<TBase, TFilters, TPopulateKeys | (keyof TPopulateKeys & string)[] | '*' | boolean, TFields>,
