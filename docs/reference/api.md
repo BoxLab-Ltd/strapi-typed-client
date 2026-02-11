@@ -1,0 +1,567 @@
+# API Reference
+
+Complete reference for the `StrapiClient` class and all its methods.
+
+## StrapiClient
+
+### Constructor
+
+```ts
+import { StrapiClient } from './dist'
+
+const strapi = new StrapiClient(config: StrapiClientConfig)
+```
+
+**StrapiClientConfig:**
+
+| Property         | Type                 | Required | Description                                                   |
+| ---------------- | -------------------- | -------- | ------------------------------------------------------------- |
+| `baseURL`        | `string`             | Yes      | Strapi server URL (e.g., `http://localhost:1337`)             |
+| `token`          | `string`             | No       | Bearer token for authenticated requests                       |
+| `fetch`          | `typeof fetch`       | No       | Custom fetch function (defaults to `globalThis.fetch`)        |
+| `debug`          | `boolean`            | No       | Log all requests to console                                   |
+| `credentials`    | `RequestCredentials` | No       | Credentials mode for fetch (`include`, `same-origin`, `omit`) |
+| `validateSchema` | `boolean`            | No       | Check schema hash on init and warn if types are outdated      |
+
+```ts
+// Minimal configuration
+const strapi = new StrapiClient({
+    baseURL: 'http://localhost:1337',
+})
+
+// Full configuration
+const strapi = new StrapiClient({
+    baseURL: 'https://api.example.com',
+    token: 'your-api-token',
+    debug: process.env.NODE_ENV === 'development',
+    credentials: 'include',
+    validateSchema: process.env.NODE_ENV === 'development',
+})
+
+// With custom fetch (e.g., for Node.js or testing)
+import fetch from 'node-fetch'
+
+const strapi = new StrapiClient({
+    baseURL: 'http://localhost:1337',
+    fetch: fetch as any,
+})
+```
+
+### setToken
+
+Updates the Bearer token used for all subsequent requests.
+
+```ts
+strapi.setToken(token: string): void
+```
+
+```ts
+// Set token after login
+const { jwt } = await strapi.authentication.login({
+    identifier: 'user@example.com',
+    password: 'password',
+})
+strapi.setToken(jwt)
+```
+
+### validateSchema
+
+Checks whether the locally generated types match the remote Strapi schema.
+
+```ts
+strapi.validateSchema(): Promise<{
+  valid: boolean
+  localHash: string
+  remoteHash?: string
+  error?: string
+}>
+```
+
+```ts
+const result = await strapi.validateSchema()
+if (!result.valid) {
+    console.warn('Types are outdated! Run: npx strapi-types generate')
+}
+```
+
+::: tip
+When `validateSchema: true` is set in the config, this check runs automatically on client construction and logs a warning if the schema has drifted.
+:::
+
+## Collection API
+
+Each collection type gets a property on the `StrapiClient` instance. For example, if your Strapi project has an `Article` content type, you access it as `strapi.articles`.
+
+### find
+
+Fetches a list of entries.
+
+```ts
+find(params?, nextOptions?): Promise<T[]>
+```
+
+**Parameters:**
+
+| Parameter     | Type          | Description                                                    |
+| ------------- | ------------- | -------------------------------------------------------------- |
+| `params`      | `QueryParams` | Query parameters (filters, sort, pagination, populate, fields) |
+| `nextOptions` | `NextOptions` | Next.js cache options                                          |
+
+**Returns:** `Promise<T[]>` where `T` is the base type (or populated type if `populate` is specified).
+
+```ts
+// Basic find — returns Article[]
+const articles = await strapi.articles.find()
+
+// With filters
+const published = await strapi.articles.find({
+    filters: { status: { $eq: 'published' } },
+})
+
+// With sort and pagination
+const recent = await strapi.articles.find({
+    sort: ['createdAt:desc'],
+    pagination: { page: 1, pageSize: 10 },
+})
+
+// With populate — return type automatically includes relations
+const withCategory = await strapi.articles.find({
+    populate: { category: true, cover: true },
+})
+// withCategory[0].category  <-- typed as Category | null
+// withCategory[0].cover     <-- typed as MediaFile
+
+// Populate all relations
+const full = await strapi.articles.find({
+    populate: '*',
+})
+
+// With field selection
+const titles = await strapi.articles.find({
+    fields: ['title', 'slug'],
+})
+
+// With Next.js cache options
+const cached = await strapi.articles.find(
+    { filters: { status: 'published' } },
+    { revalidate: 3600, tags: ['articles'] },
+)
+```
+
+### findWithMeta
+
+Same as `find` but returns the full Strapi response including pagination metadata.
+
+```ts
+findWithMeta(params?, nextOptions?): Promise<StrapiResponse<T[]>>
+```
+
+**Returns:** `Promise<StrapiResponse<T[]>>` with the response shape:
+
+```ts
+interface StrapiResponse<T> {
+    data: T
+    meta?: {
+        pagination?: {
+            page: number
+            pageSize: number
+            pageCount: number
+            total: number
+        }
+    }
+}
+```
+
+```ts
+const response = await strapi.articles.findWithMeta({
+    pagination: { page: 1, pageSize: 10 },
+})
+
+console.log(response.data) // Article[]
+console.log(response.meta.pagination) // { page: 1, pageSize: 10, pageCount: 5, total: 47 }
+```
+
+### findOne
+
+Fetches a single entry by its document ID.
+
+```ts
+findOne(documentId, params?, nextOptions?): Promise<T | null>
+```
+
+**Parameters:**
+
+| Parameter     | Type          | Description                         |
+| ------------- | ------------- | ----------------------------------- |
+| `documentId`  | `string`      | The Strapi document ID              |
+| `params`      | `QueryParams` | Query parameters (populate, fields) |
+| `nextOptions` | `NextOptions` | Next.js cache options               |
+
+**Returns:** `Promise<T | null>`
+
+```ts
+// Basic findOne
+const article = await strapi.articles.findOne('abc123')
+
+// With populate
+const article = await strapi.articles.findOne('abc123', {
+    populate: {
+        category: true,
+        cover: { fields: ['url', 'alternativeText'] },
+        tags: { sort: ['name:asc'], limit: 5 },
+    },
+})
+
+// With Next.js options
+const article = await strapi.articles.findOne(
+    'abc123',
+    { populate: { category: true } },
+    { revalidate: 60, tags: ['article-abc123'] },
+)
+```
+
+### create
+
+Creates a new entry.
+
+```ts
+create(data, nextOptions?): Promise<T>
+```
+
+**Parameters:**
+
+| Parameter     | Type                 | Description                                               |
+| ------------- | -------------------- | --------------------------------------------------------- |
+| `data`        | `TInput \| FormData` | The entry data (typed input or FormData for file uploads) |
+| `nextOptions` | `NextOptions`        | Next.js cache options                                     |
+
+**Returns:** `Promise<T>` -- the created entry.
+
+```ts
+// Create with typed input
+const article = await strapi.articles.create({
+    title: 'New Article',
+    slug: 'new-article',
+    body: 'Article content here.',
+    status: 'draft',
+    category: 5, // relation by ID
+    cover: 12, // media by ID
+    tags: [1, 2, 3], // many relation by IDs
+})
+
+// Create with FormData (for file uploads in the same request)
+const formData = new FormData()
+formData.append('data', JSON.stringify({ title: 'With File' }))
+formData.append('files.cover', fileBlob, 'cover.jpg')
+
+const article = await strapi.articles.create(formData)
+```
+
+### update
+
+Updates an existing entry by its document ID.
+
+```ts
+update(documentId, data, nextOptions?): Promise<T>
+```
+
+**Parameters:**
+
+| Parameter     | Type                 | Description            |
+| ------------- | -------------------- | ---------------------- |
+| `documentId`  | `string`             | The Strapi document ID |
+| `data`        | `TInput \| FormData` | Partial entry data     |
+| `nextOptions` | `NextOptions`        | Next.js cache options  |
+
+**Returns:** `Promise<T>` -- the updated entry.
+
+```ts
+// Partial update — only specified fields are changed
+const updated = await strapi.articles.update('abc123', {
+    title: 'Updated Title',
+    status: 'published',
+})
+
+// Clear a field by setting it to null
+const cleared = await strapi.articles.update('abc123', {
+    cover: null,
+    body: null,
+})
+```
+
+### delete
+
+Deletes an entry by its document ID.
+
+```ts
+delete(documentId, nextOptions?): Promise<T | null>
+```
+
+**Parameters:**
+
+| Parameter     | Type          | Description            |
+| ------------- | ------------- | ---------------------- |
+| `documentId`  | `string`      | The Strapi document ID |
+| `nextOptions` | `NextOptions` | Next.js cache options  |
+
+**Returns:** `Promise<T | null>` -- the deleted entry, or null.
+
+```ts
+const deleted = await strapi.articles.delete('abc123')
+```
+
+## Single Type API
+
+Single types (e.g., a Homepage or Global Settings content type) expose a reduced API since there is only one entry.
+
+### find
+
+Fetches the single type entry.
+
+```ts
+find(params?, nextOptions?): Promise<T>
+```
+
+```ts
+// Fetch the homepage single type
+const homepage = await strapi.homepage.find()
+
+// With populate
+const homepage = await strapi.homepage.find({
+    populate: { hero: true, seo: true },
+})
+```
+
+### update
+
+Updates the single type entry. No `documentId` is needed.
+
+```ts
+update(data, nextOptions?): Promise<T>
+```
+
+```ts
+const updated = await strapi.homepage.update({
+    heroTitle: 'Welcome to our site',
+})
+```
+
+::: info
+Single types do not have `findOne`, `create`, or `delete` methods. Use `find` to read and `update` to modify.
+:::
+
+## Authentication API
+
+The authentication API is available at `strapi.authentication` and provides methods for the Strapi Users & Permissions plugin.
+
+::: tip
+The exact methods available on `strapi.authentication` depend on your Strapi project's auth and user controller routes. Common methods like `login`, `register`, `me`, and `forgotPassword` are generated automatically when the corresponding routes exist.
+:::
+
+## QueryParams
+
+The `QueryParams` interface is used by `find`, `findWithMeta`, and `findOne`.
+
+```ts
+interface QueryParams<TEntity, TFilters, TPopulate, TFields> {
+    filters?: TFilters
+    sort?: SortOption | SortOption[]
+    pagination?: {
+        page?: number
+        pageSize?: number
+        limit?: number
+        start?: number
+    }
+    populate?: TPopulate
+    fields?: TFields[]
+}
+```
+
+### filters
+
+Type-safe filter object. Each content type gets its own `Filters` type.
+
+```ts
+await strapi.articles.find({
+    filters: {
+        title: { $contains: 'typescript' },
+        views: { $gte: 100 },
+        status: { $eq: 'published' },
+        $or: [
+            { category: { id: { $eq: 1 } } },
+            { category: { id: { $eq: 2 } } },
+        ],
+    },
+})
+```
+
+**Available filter operators:**
+
+| Operator       | Types        | Description                          |
+| -------------- | ------------ | ------------------------------------ |
+| `$eq`          | all          | Equal                                |
+| `$eqi`         | string       | Equal (case-insensitive)             |
+| `$ne`          | all          | Not equal                            |
+| `$lt`, `$lte`  | number, date | Less than / less than or equal       |
+| `$gt`, `$gte`  | number, date | Greater than / greater than or equal |
+| `$in`          | all          | Included in array                    |
+| `$notIn`       | all          | Not included in array                |
+| `$contains`    | string       | Contains substring                   |
+| `$notContains` | string       | Does not contain substring           |
+| `$containsi`   | string       | Contains (case-insensitive)          |
+| `$startsWith`  | string       | Starts with                          |
+| `$endsWith`    | string       | Ends with                            |
+| `$between`     | number, date | Between two values                   |
+| `$null`        | all          | Is null                              |
+| `$notNull`     | all          | Is not null                          |
+| `$and`         | logical      | All conditions must match            |
+| `$or`          | logical      | At least one condition must match    |
+| `$not`         | logical      | Negation                             |
+
+### sort
+
+Sort by one or more fields. Append `:asc` or `:desc` for direction.
+
+```ts
+await strapi.articles.find({
+    sort: ['createdAt:desc'],
+})
+
+await strapi.articles.find({
+    sort: ['status:asc', 'createdAt:desc'],
+})
+```
+
+### pagination
+
+Two pagination styles are supported:
+
+```ts
+// Page-based pagination
+await strapi.articles.find({
+    pagination: { page: 2, pageSize: 25 },
+})
+
+// Offset-based pagination
+await strapi.articles.find({
+    pagination: { start: 50, limit: 25 },
+})
+```
+
+### populate
+
+See [Populate & Type Inference](/guide/populate) for a detailed guide. Quick summary:
+
+```ts
+// Populate specific relations
+{ populate: { category: true, cover: true } }
+
+// Populate all relations (1 level deep)
+{ populate: '*' }
+
+// Nested populate with options
+{ populate: {
+  category: {
+    fields: ['name', 'slug'],
+    populate: { icon: true }
+  }
+}}
+```
+
+### fields
+
+Select specific fields to return. Reduces payload size.
+
+```ts
+await strapi.articles.find({
+    fields: ['title', 'slug', 'createdAt'],
+})
+```
+
+## NextOptions
+
+Optional second parameter on all API methods for Next.js cache control.
+
+```ts
+interface NextOptions {
+    revalidate?: number | false
+    tags?: string[]
+    cache?: RequestCache
+}
+```
+
+| Property     | Type              | Description                                                     |
+| ------------ | ----------------- | --------------------------------------------------------------- |
+| `revalidate` | `number \| false` | ISR revalidation period in seconds, or `false` to disable       |
+| `tags`       | `string[]`        | Cache tags for on-demand revalidation via `revalidateTag()`     |
+| `cache`      | `RequestCache`    | Standard fetch cache mode (`'no-store'`, `'force-cache'`, etc.) |
+
+```ts
+// ISR: revalidate every hour
+await strapi.articles.find({}, { revalidate: 3600 })
+
+// Tag-based revalidation
+await strapi.articles.find({}, { tags: ['articles'] })
+
+// No caching
+await strapi.articles.find({}, { cache: 'no-store' })
+
+// Combine options
+await strapi.articles.find(
+    { filters: { status: 'published' } },
+    { revalidate: 300, tags: ['articles', 'published'] },
+)
+```
+
+::: info
+`NextOptions` are passed through to the underlying `fetch` call as `{ next: { revalidate, tags }, cache }`. They only have an effect in a Next.js environment where `fetch` is patched. In other environments, they are safely ignored.
+:::
+
+## StrapiResponse
+
+The response wrapper returned by `findWithMeta`.
+
+```ts
+interface StrapiResponse<T> {
+    data: T
+    meta?: {
+        pagination?: {
+            page: number
+            pageSize: number
+            pageCount: number
+            total: number
+        }
+    }
+}
+```
+
+## StrapiError
+
+Custom error class thrown on non-OK HTTP responses.
+
+```ts
+class StrapiError extends Error {
+    /** Clean user-friendly message from Strapi backend */
+    userMessage: string
+    /** HTTP status code */
+    status: number
+    /** HTTP status text */
+    statusText: string
+    /** Additional error details from Strapi */
+    details?: any
+}
+```
+
+```ts
+import { StrapiError } from './dist'
+
+try {
+    await strapi.articles.create({ title: '' })
+} catch (error) {
+    if (error instanceof StrapiError) {
+        console.log(error.status) // 400
+        console.log(error.userMessage) // "title must be at least 1 character"
+        console.log(error.details) // validation details from Strapi
+    }
+}
+```

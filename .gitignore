@@ -1,0 +1,35 @@
+# Dependencies
+node_modules/
+yarn-error.log
+
+# Build output
+dist/
+
+# Input files (copied from Strapi)
+src/input/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.log
+*.tmp
+trace/
+
+# Test files
+test-*.ts
+
+# VitePress
+docs/.vitepress/dist
+docs/.vitepress/cache
+
+# Claude Code
+CLAUDE.md
+.claude

@@ -1,0 +1,152 @@
+{
+    "name": "strapi-typed-client",
+    "version": "1.0.0",
+    "type": "module",
+    "description": "Type-safe Strapi v5 client with automatic TypeScript codegen and populate type inference",
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "bin": {
+        "strapi-types": "./dist/cli/index.js"
+    },
+    "files": [
+        "dist",
+        "strapi-server.js",
+        "strapi-admin.js"
+    ],
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/BoxLab-Ltd/strapi-typed-client"
+    },
+    "scripts": {
+        "build": "tsc",
+        "generate": "node --import tsx src/cli/index.ts generate",
+        "dev": "node --import tsx src/cli/index.ts",
+        "prepublishOnly": "yarn build",
+        "test": "vitest run",
+        "test:watch": "vitest",
+        "lint": "eslint src/",
+        "lint:fix": "eslint src/ --fix",
+        "prepare": "husky",
+        "docs:dev": "vitepress dev docs",
+        "docs:build": "vitepress build docs",
+        "docs:preview": "vitepress preview docs"
+    },
+    "lint-staged": {
+        "*.{ts,tsx}": [
+            "eslint --fix",
+            "prettier --write"
+        ],
+        "*.{js,json,md}": [
+            "prettier --write"
+        ]
+    },
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "import": "./dist/index.js",
+            "default": "./dist/index.js"
+        },
+        "./plugin": {
+            "types": "./dist/plugin/index.d.ts",
+            "import": "./dist/plugin/index.js",
+            "default": "./dist/plugin/index.js"
+        },
+        "./strapi-server": {
+            "types": "./dist/plugin/server/src/index.d.ts",
+            "import": "./strapi-server.js",
+            "default": "./strapi-server.js"
+        },
+        "./strapi-admin": {
+            "types": "./dist/plugin/admin/src/index.d.ts",
+            "import": "./strapi-admin.js",
+            "default": "./strapi-admin.js"
+        },
+        "./next": {
+            "types": "./dist/next/index.d.ts",
+            "import": "./dist/next/index.js",
+            "default": "./dist/next/index.js"
+        },
+        "./package.json": "./package.json"
+    },
+    "typesVersions": {
+        "*": {
+            "plugin": [
+                "./dist/plugin/index.d.ts"
+            ],
+            "next": [
+                "./dist/next/index.d.ts"
+            ],
+            "strapi-server": [
+                "./dist/plugin/server/src/index.d.ts"
+            ],
+            "strapi-admin": [
+                "./dist/plugin/admin/src/index.d.ts"
+            ]
+        }
+    },
+    "strapi": {
+        "kind": "plugin",
+        "name": "strapi-typed-client",
+        "displayName": "Strapi Typed Client",
+        "description": "Exposes Strapi schema through REST API for TypeScript type generation"
+    },
+    "keywords": [
+        "strapi",
+        "typescript",
+        "types",
+        "generator",
+        "codegen",
+        "cli"
+    ],
+    "author": "",
+    "license": "MIT",
+    "dependencies": {
+        "commander": "^12.0.0",
+        "qs": "^6.14.0"
+    },
+    "devDependencies": {
+        "@eslint/js": "^10.0.1",
+        "@strapi/design-system": "^2.0.0",
+        "@strapi/icons": "^2.0.0",
+        "@types/node": "^20.0.0",
+        "@types/qs": "^6.14.0",
+        "@types/react": "^18.0.0",
+        "@types/react-dom": "^18.0.0",
+        "eslint": "^10.0.0",
+        "husky": "^9.1.7",
+        "lint-staged": "^16.2.7",
+        "prettier": "^3.0.0",
+        "react": "^18.0.0",
+        "react-dom": "^18.0.0",
+        "styled-components": "^6.0.0",
+        "tsx": "^4.21.0",
+        "typescript": "^5.4.0",
+        "typescript-eslint": "^8.55.0",
+        "vitepress": "^1.6.4",
+        "vitest": "^2.0.0"
+    },
+    "peerDependencies": {
+        "@strapi/design-system": "^2.0.0",
+        "@strapi/strapi": "^5.0.0",
+        "react": "^18.0.0",
+        "react-dom": "^18.0.0"
+    },
+    "peerDependenciesMeta": {
+        "@strapi/strapi": {
+            "optional": true
+        },
+        "@strapi/design-system": {
+            "optional": true
+        },
+        "react": {
+            "optional": true
+        },
+        "react-dom": {
+            "optional": true
+        }
+    },
+    "engines": {
+        "node": ">=18.0.0"
+    },
+    "packageManager": "yarn@1.22.22+sha512.a6b2f7906b721bba3d67d4aff083df04dad64c399707841b7acf00f6b133b7ac24255f2652fa22ae3534329dc6180534e98d17432037ff6fd140556e2bb3137e"
+}

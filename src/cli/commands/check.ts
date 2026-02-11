@@ -1,0 +1,142 @@
+/**
+ * Check command - verifies that local types are in sync with remote schema
+ * Returns exit code 0 if in sync, 1 if out of sync
+ */
+
+import { createApiClient } from '../utils/api-client.js'
+import { readLocalSchemaHash } from '../utils/file-writer.js'
+
+export interface CheckOptions {
+    url?: string
+    token?: string
+    output?: string
+    silent?: boolean
+}
+
+export interface CheckResult {
+    inSync: boolean
+    localHash: string | null
+    remoteHash: string | null
+    error?: string
+}
+
+/**
+ * Check if local types are in sync with remote schema
+ */
+export async function check(options: CheckOptions): Promise<CheckResult> {
+    const outputDir = options.output || './dist'
+
+    try {
+        // Read local hash
+        const localHash = readLocalSchemaHash(outputDir)
+
+        if (!localHash) {
+            return {
+                inSync: false,
+                localHash: null,
+                remoteHash: null,
+                error: `No schema-meta.ts found in ${outputDir}. Run 'strapi-types generate' first.`,
+            }
+        }
+
+        // Create API client
+        const client = createApiClient({
+            url: options.url,
+            token: options.token,
+        })
+
+        // Fetch remote hash
+        if (!options.silent) {
+            console.log(
+                `Checking schema hash from ${options.url || process.env.STRAPI_URL || 'http://localhost:1337'}...`,
+            )
+        }
+
+        const { hash: remoteHash } = await client.getSchemaHash()
+
+        // Compare hashes
+        const inSync = localHash === remoteHash
+
+        if (!options.silent) {
+            if (inSync) {
+                console.log(
+                    `Types are in sync (hash: ${localHash.substring(0, 8)}...)`,
+                )
+            } else {
+                console.log(`Types are out of sync!`)
+                console.log(`  Local:  ${localHash.substring(0, 8)}...`)
+                console.log(`  Remote: ${remoteHash.substring(0, 8)}...`)
+            }
+        }
+
+        return {
+            inSync,
+            localHash,
+            remoteHash,
+        }
+    } catch (error) {
+        return {
+            inSync: false,
+            localHash: null,
+            remoteHash: null,
+            error: (error as Error).message,
+        }
+    }
+}
+
+interface CheckCliOptions {
+    url?: string
+    token?: string
+    output?: string
+    silent?: boolean
+}
+
+/**
+ * CLI handler for check command
+ */
+export function createCheckCommand(program: {
+    command: (...args: any[]) => any
+}): void {
+    program
+        .command('check')
+        .description(
+            'Check if local types are in sync with remote Strapi schema',
+        )
+        .option(
+            '-u, --url <url>',
+            'Strapi API URL (default: STRAPI_URL env or http://localhost:1337)',
+        )
+        .option(
+            '-t, --token <token>',
+            'Strapi API token (default: STRAPI_TOKEN env)',
+        )
+        .option(
+            '-o, --output <path>',
+            'Output directory to check (default: ./dist)',
+        )
+        .option('-s, --silent', 'Suppress output messages')
+        .action(async (opts: CheckCliOptions) => {
+            const result = await check({
+                url: opts.url,
+                token: opts.token,
+                output: opts.output,
+                silent: opts.silent,
+            })
+
+            if (result.error) {
+                console.error('Check failed:', result.error)
+                process.exit(1)
+            }
+
+            if (!result.inSync) {
+                if (!opts.silent) {
+                    console.log(
+                        "\nRun 'strapi-types generate' to update types.",
+                    )
+                }
+                process.exit(1)
+            }
+
+            process.exit(0)
+        })
+}
