@@ -3,6 +3,7 @@
  */
 
 import * as fs from 'fs'
+import { createRequire } from 'module'
 import * as path from 'path'
 
 export interface WriteResult {
@@ -96,6 +97,22 @@ export function generateSchemaMetaContent(
 export const SCHEMA_HASH = '${hash}'
 export const GENERATED_AT = '${generatedAt}'
 `
+}
+
+/**
+ * Resolve default output directory: package dist/ in node_modules.
+ * Falls back to ./dist when the package can't be resolved (e.g. local dev).
+ */
+export function getDefaultOutputDir(): string {
+    try {
+        const _require = createRequire(
+            path.resolve(process.cwd(), 'package.json'),
+        )
+        const pkgJsonPath = _require.resolve('strapi-typed-client/package.json')
+        return path.join(path.dirname(pkgJsonPath), 'dist')
+    } catch {
+        return './dist'
+    }
 }
 
 /**

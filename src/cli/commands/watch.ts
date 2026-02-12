@@ -3,7 +3,10 @@
  */
 
 import { createApiClient } from '../utils/api-client.js'
-import { readLocalSchemaHash } from '../utils/file-writer.js'
+import {
+    readLocalSchemaHash,
+    getDefaultOutputDir,
+} from '../utils/file-writer.js'
 import { generate } from './generate.js'
 
 export interface WatchOptions {
@@ -18,7 +21,7 @@ export interface WatchOptions {
  * Watch for schema changes
  */
 export async function watch(options: WatchOptions): Promise<void> {
-    const outputDir = options.output || './dist'
+    const outputDir = options.output || getDefaultOutputDir()
     const interval = options.interval || 5000
 
     const client = createApiClient({
@@ -139,7 +142,7 @@ export function createWatchCommand(program: {
         )
         .option(
             '-o, --output <path>',
-            'Output directory (default: ./strapi-types)',
+            'Output directory (default: node_modules/strapi-typed-client/dist)',
         )
         .option(
             '-i, --interval <ms>',

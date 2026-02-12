@@ -9,6 +9,7 @@ import {
     getSchemaMetaPath,
     generateSchemaMetaContent,
     readLocalSchemaHash,
+    getDefaultOutputDir,
 } from '../utils/file-writer.js'
 import { Generator } from '../../generator/index.js'
 import { transformSchema } from '../../core/schema-transformer.js'
@@ -35,7 +36,7 @@ export interface GenerateResult {
 export async function generate(
     options: GenerateOptions,
 ): Promise<GenerateResult> {
-    const outputDir = options.output || './dist'
+    const outputDir = options.output || getDefaultOutputDir()
     const filesWritten: string[] = []
 
     try {
@@ -177,7 +178,10 @@ export function createGenerateCommand(program: {
             '-t, --token <token>',
             'Strapi API token (default: STRAPI_TOKEN env)',
         )
-        .option('-o, --output <path>', 'Output directory (default: ./dist)')
+        .option(
+            '-o, --output <path>',
+            'Output directory (default: node_modules/strapi-typed-client/dist)',
+        )
         .option('-s, --silent', 'Suppress output messages')
         .option('-f, --force', 'Force regeneration even if schema unchanged')
         .action(async (opts: GenerateCliOptions) => {

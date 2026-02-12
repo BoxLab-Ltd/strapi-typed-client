@@ -4,7 +4,10 @@
  */
 
 import { createApiClient } from '../utils/api-client.js'
-import { readLocalSchemaHash } from '../utils/file-writer.js'
+import {
+    readLocalSchemaHash,
+    getDefaultOutputDir,
+} from '../utils/file-writer.js'
 
 export interface CheckOptions {
     url?: string
@@ -24,7 +27,7 @@ export interface CheckResult {
  * Check if local types are in sync with remote schema
  */
 export async function check(options: CheckOptions): Promise<CheckResult> {
-    const outputDir = options.output || './dist'
+    const outputDir = options.output || getDefaultOutputDir()
 
     try {
         // Read local hash
@@ -112,7 +115,7 @@ export function createCheckCommand(program: {
         )
         .option(
             '-o, --output <path>',
-            'Output directory to check (default: ./dist)',
+            'Output directory to check (default: node_modules/strapi-typed-client/dist)',
         )
         .option('-s, --silent', 'Suppress output messages')
         .action(async (opts: CheckCliOptions) => {
