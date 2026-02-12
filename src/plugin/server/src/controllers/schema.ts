@@ -7,6 +7,9 @@ export interface StrapiContext {
     state: {
         user?: unknown
     }
+    request: {
+        header: Record<string, string | undefined>
+    }
     unauthorized: (message: string) => void
     body: unknown
 }
@@ -21,8 +24,36 @@ export interface StrapiInstance {
             getSchemaHash: () => unknown
         }
     }
+    service: (uid: string) => any
     log: {
         error: (message: string, error?: unknown) => void
+    }
+}
+
+/**
+ * Manually validate an API token since routes use auth: false
+ * (Strapi skips its auth middleware when auth: false is set)
+ */
+async function validateApiToken(
+    strapi: StrapiInstance,
+    ctx: StrapiContext,
+): Promise<boolean> {
+    // Already authenticated via other means
+    if (ctx.state.user) return true
+
+    const authorization = ctx.request.header.authorization
+    if (!authorization) return false
+
+    const [scheme, token] = authorization.split(' ')
+    if (scheme !== 'Bearer' || !token) return false
+
+    try {
+        const apiTokenService = strapi.service('admin::api-token')
+        const accessKey = await apiTokenService.hash(token)
+        const storedToken = await apiTokenService.getBy({ accessKey })
+        return !!storedToken
+    } catch {
+        return false
     }
 }
 
@@ -32,14 +63,18 @@ export default ({ strapi }: { strapi: StrapiInstance }) => ({
      * Returns the full schema with hash
      */
     async getSchema(ctx: StrapiContext) {
-        // Check auth based on config
         const requireAuth = strapi.config.get(
             'plugin::strapi-typed-client.requireAuth',
             process.env.NODE_ENV === 'production',
         )
 
-        if (requireAuth && !ctx.state.user) {
-            return ctx.unauthorized('Authentication required to access schema')
+        if (requireAuth) {
+            const isAuthenticated = await validateApiToken(strapi, ctx)
+            if (!isAuthenticated) {
+                return ctx.unauthorized(
+                    'Authentication required to access schema',
+                )
+            }
         }
 
         try {
@@ -60,16 +95,18 @@ export default ({ strapi }: { strapi: StrapiInstance }) => ({
      * Returns only the schema hash (lightweight)
      */
     async getSchemaHash(ctx: StrapiContext) {
-        // Check auth based on config
         const requireAuth = strapi.config.get(
             'plugin::strapi-typed-client.requireAuth',
             process.env.NODE_ENV === 'production',
         )
 
-        if (requireAuth && !ctx.state.user) {
-            return ctx.unauthorized(
-                'Authentication required to access schema hash',
-            )
+        if (requireAuth) {
+            const isAuthenticated = await validateApiToken(strapi, ctx)
+            if (!isAuthenticated) {
+                return ctx.unauthorized(
+                    'Authentication required to access schema hash',
+                )
+            }
         }
 
         try {
