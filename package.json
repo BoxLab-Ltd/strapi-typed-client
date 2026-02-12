@@ -1,6 +1,6 @@
 {
     "name": "strapi-typed-client",
-    "version": "1.0.4",
+    "version": "1.0.5",
     "type": "module",
     "description": "Type-safe Strapi v5 client with automatic TypeScript codegen and populate type inference",
     "main": "dist/index.js",
@@ -92,17 +92,18 @@
     },
     "keywords": [
         "strapi",
+        "strapi-plugin",
         "typescript",
         "types",
         "generator",
         "codegen",
         "cli"
     ],
-    "author": "",
+    "author": "BoxLab Ltd",
     "license": "MIT",
     "dependencies": {
         "commander": "^12.0.0",
-        "qs": "^6.14.0"
+        "qs": "^6.14.2"
     },
     "devDependencies": {
         "@eslint/js": "^10.0.1",
@@ -123,7 +124,7 @@
         "typescript": "^5.4.0",
         "typescript-eslint": "^8.55.0",
         "vitepress": "^1.6.4",
-        "vitest": "^2.0.0"
+        "vitest": "^3.2.0"
     },
     "peerDependencies": {
         "@strapi/design-system": "^2.0.0",
@@ -147,6 +148,10 @@
     },
     "engines": {
         "node": ">=18.0.0"
+    },
+    "resolutions": {
+        "esbuild": ">=0.25.0",
+        "lodash": ">=4.17.23"
     },
     "packageManager": "yarn@1.22.22+sha512.a6b2f7906b721bba3d67d4aff083df04dad64c399707841b7acf00f6b133b7ac24255f2652fa22ae3534329dc6180534e98d17432037ff6fd140556e2bb3137e"
 }

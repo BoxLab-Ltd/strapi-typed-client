@@ -78,6 +78,12 @@ Full documentation is available at **[boxlab-ltd.github.io/strapi-typed-client](
 - [Plugin Config](https://boxlab-ltd.github.io/strapi-typed-client/advanced/plugin-config) — requireAuth, endpoints, schema hashing
 - [API Reference](https://boxlab-ltd.github.io/strapi-typed-client/reference/api) — full StrapiClient API
 
+## Issues & Contributing
+
+Found a bug or have a feature request? [Open an issue](https://github.com/BoxLab-Ltd/strapi-typed-client/issues) on GitHub.
+
+Pull requests are welcome — please open an issue first to discuss what you'd like to change.
+
 ## License
 
 MIT
