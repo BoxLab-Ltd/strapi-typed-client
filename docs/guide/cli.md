@@ -14,13 +14,13 @@ npx strapi-types generate --url http://localhost:1337
 
 **Options:**
 
-| Option     | Description                               | Default                |
-| ---------- | ----------------------------------------- | ---------------------- |
-| `--url`    | Strapi server URL                         | `STRAPI_URL` env var   |
-| `--token`  | API token for authenticated access        | `STRAPI_TOKEN` env var |
-| `--output` | Output directory for generated files      | `./dist`               |
-| `--silent` | Suppress all console output               | `false`                |
-| `--force`  | Regenerate even if schema has not changed | `false`                |
+| Option     | Description                               | Default                                 |
+| ---------- | ----------------------------------------- | --------------------------------------- |
+| `--url`    | Strapi server URL                         | `STRAPI_URL` env var                    |
+| `--token`  | API token for authenticated access        | `STRAPI_TOKEN` env var                  |
+| `--output` | Output directory for generated files      | `node_modules/strapi-typed-client/dist` |
+| `--silent` | Suppress all console output               | `false`                                 |
+| `--force`  | Regenerate even if schema has not changed | `false`                                 |
 
 **Examples:**
 

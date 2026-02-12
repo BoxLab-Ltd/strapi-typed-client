@@ -32,7 +32,7 @@ npx strapi-types generate --url http://localhost:1337
 ### 4. Use
 
 ```typescript
-import { StrapiClient } from './dist'
+import { StrapiClient } from 'strapi-typed-client'
 
 const strapi = new StrapiClient({
     baseURL: 'http://localhost:1337',

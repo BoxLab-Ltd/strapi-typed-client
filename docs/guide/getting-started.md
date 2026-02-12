@@ -96,7 +96,7 @@ With Strapi running, use the CLI to fetch the schema and generate TypeScript typ
 npx strapi-types generate --url http://localhost:1337
 ```
 
-This creates the following files in `./dist` by default:
+This generates files directly into the installed package (`node_modules/strapi-typed-client/dist`) so you can import from `strapi-typed-client` immediately:
 
 | File         | Description                                                    |
 | ------------ | -------------------------------------------------------------- |
@@ -115,7 +115,7 @@ npx strapi-types generate --url http://localhost:1337 --output ./src/strapi
 Once types are generated, create a client and start making typed API calls:
 
 ```ts
-import { StrapiClient } from './dist'
+import { StrapiClient } from 'strapi-typed-client'
 
 const strapi = new StrapiClient({
     baseURL: 'http://localhost:1337',
