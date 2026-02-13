@@ -18,6 +18,8 @@ export default defineConfig({
     ],
 
     themeConfig: {
+        logo: '/logo.svg',
+
         nav: [
             { text: 'Guide', link: '/guide/getting-started' },
             { text: 'Advanced', link: '/advanced/dynamic-zones' },
