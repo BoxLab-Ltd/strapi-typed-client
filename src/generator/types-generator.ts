@@ -1,3 +1,4 @@
+import { Project, SourceFile } from 'ts-morph'
 import { ParsedSchema, ContentType, Component } from '../schema-types.js'
 import { TypeTransformer } from '../transformer/index.js'
 import {
@@ -16,81 +17,59 @@ export class TypesGenerator {
 
     generate(schema: ParsedSchema): string {
         this.schema = schema
-        const lines: string[] = []
+        const project = new Project({ useInMemoryFileSystem: true })
+        const sf = project.createSourceFile('types.ts')
 
-        // Add header comment
-        lines.push('// Auto-generated TypeScript types from Strapi schema')
-        lines.push('// Do not edit manually')
-        lines.push('')
+        // Header comments
+        sf.addStatements([
+            '// Auto-generated TypeScript types from Strapi schema',
+            '// Do not edit manually',
+        ])
 
-        // Generate base types
-        lines.push(this.generateBaseTypes())
-        lines.push('')
+        // Base types (static block)
+        sf.addStatements(this.generateBaseTypes())
 
-        // Generate helper types for populate params
-        lines.push('// Helper types for field and sort options in populate')
-        lines.push(
-            "type _EntityField<T> = Exclude<keyof T & string, '__typename'>",
-        )
-        lines.push(
-            'type _SortValue<T> = _EntityField<T> | `${_EntityField<T>}:${"asc" | "desc"}`',
-        )
-        lines.push('')
-        lines.push(
-            '// Apply fields narrowing from populate entry (e.g. populate: { item: { fields: ["title"] } })',
-        )
-        lines.push(
-            "type _ApplyFields<TFull, TBase, TEntry> = TEntry extends true ? TFull : TEntry extends { fields: readonly (infer F)[] } ? F extends string ? Pick<TBase, Extract<F | 'id' | 'documentId', keyof TBase>> & Omit<TFull, keyof TBase> : TFull : TFull",
-        )
-        lines.push('')
+        // Helper types (static block)
+        sf.addStatements(this.generateHelperTypes())
 
-        // Generate component types
+        // Component interfaces
         for (const component of schema.components) {
-            lines.push(this.generateComponent(component))
-            lines.push('')
+            this.addComponentInterface(sf, component)
         }
 
-        // Generate component Input types
+        // Component Input interfaces
         for (const component of schema.components) {
-            lines.push(this.generateComponentInput(component))
-            lines.push('')
+            this.addComponentInputInterface(sf, component)
         }
 
-        // Generate content type interfaces
+        // Content type interfaces
         for (const contentType of schema.contentTypes) {
-            lines.push(this.generateContentType(contentType))
-            lines.push('')
+            this.addContentTypeInterface(sf, contentType)
         }
 
-        // Generate Input types for create/update operations
+        // Input type interfaces
         for (const contentType of schema.contentTypes) {
-            lines.push(this.generateInputType(contentType))
-            lines.push('')
+            this.addInputTypeInterface(sf, contentType)
         }
 
-        // Generate PopulateParam types for type-safe populate
-        lines.push(this.generatePopulateParams(schema))
-        lines.push('')
+        // PopulateParam types
+        this.addPopulateParams(sf, schema)
 
-        // Generate Payload utility types
-        lines.push(this.generatePayloadUtilityTypes(schema))
-        lines.push('')
+        // Payload utility types
+        this.addPayloadUtilityTypes(sf, schema)
 
-        // Generate filter utility types
-        lines.push(generateFilterUtilityTypes())
-        lines.push('')
+        // Filter utility types (static block)
+        sf.addStatements(generateFilterUtilityTypes())
 
-        // Generate typed query params
-        lines.push(generateTypedQueryParams())
-        lines.push('')
+        // Typed query params (static block)
+        sf.addStatements(generateTypedQueryParams())
 
-        // Generate entity-specific filters
+        // Entity-specific filters
         for (const contentType of schema.contentTypes) {
-            lines.push(generateEntityFilters(contentType))
-            lines.push('')
+            sf.addStatements(generateEntityFilters(contentType))
         }
 
-        return lines.join('\n')
+        return sf.getFullText()
     }
 
     private generateBaseTypes(): string {
@@ -238,222 +217,234 @@ export interface LinkInline {
 }`
     }
 
-    private generateComponent(component: Component): string {
-        const lines: string[] = []
+    private generateHelperTypes(): string {
+        return `// Helper types for field and sort options in populate
+type _EntityField<T> = Exclude<keyof T & string, '__typename'>
+type _SortValue<T> = _EntityField<T> | \`\${_EntityField<T>}:\${"asc" | "desc"}\`
 
-        lines.push(`export interface ${component.cleanName} {`)
-
-        // Add base id field (components have id in Strapi)
-        lines.push('  id: number')
-
-        // Add scalar attributes
-        for (const attr of component.attributes) {
-            const tsType = this.transformer.toTypeScript(
-                attr.type,
-                attr.required,
-            )
-            lines.push(`  ${attr.name}: ${tsType}`)
-        }
-
-        // Add media fields
-        for (const mediaField of component.media) {
-            const mediaType = mediaField.multiple ? 'MediaFile[]' : 'MediaFile'
-            const suffix = mediaField.required ? '' : ' | null'
-            lines.push(`  ${mediaField.name}: ${mediaType}${suffix}`)
-        }
-
-        // Add relations (reference by ID)
-        for (const rel of component.relations) {
-            const isArray =
-                rel.relationType === 'oneToMany' ||
-                rel.relationType === 'manyToMany'
-            const relType = isArray
-                ? '{ id: number; documentId: string }[]'
-                : '{ id: number; documentId: string } | null'
-            lines.push(`  ${rel.name}: ${relType}`)
-        }
-
-        // Add components
-        for (const compField of component.components) {
-            const compType = compField.repeatable
-                ? `${compField.componentType}[]`
-                : compField.componentType
-            const suffix = compField.required ? '' : ' | null'
-            lines.push(`  ${compField.name}: ${compType}${suffix}`)
-        }
-
-        // Add dynamic zones
-        for (const dzField of component.dynamicZones) {
-            const dzType = `(${dzField.componentTypes.join(' | ')})[]`
-            const suffix = dzField.required ? '' : ' | null'
-            lines.push(`  ${dzField.name}: ${dzType}${suffix}`)
-        }
-
-        lines.push('}')
-
-        return lines.join('\n')
+// Apply fields narrowing from populate entry (e.g. populate: { item: { fields: ["title"] } })
+type _ApplyFields<TFull, TBase, TEntry> = TEntry extends true ? TFull : TEntry extends { fields: readonly (infer F)[] } ? F extends string ? Pick<TBase, Extract<F | 'id' | 'documentId', keyof TBase>> & Omit<TFull, keyof TBase> : TFull : TFull`
     }
 
-    private generateComponentInput(component: Component): string {
-        const lines: string[] = []
-
-        lines.push(`// Input type for creating/updating ${component.cleanName}`)
-        lines.push(`export interface ${component.cleanName}Input {`)
-
-        // id is optional for input (omit when creating, include when updating existing)
-        lines.push('  id?: number')
-
-        // Add scalar attributes (all optional)
-        for (const attr of component.attributes) {
-            const tsType = this.transformer.toTypeScript(attr.type, false) // Always optional
-            lines.push(`  ${attr.name}?: ${tsType}`)
-        }
-
-        // Add media fields as ID or ID array
-        for (const mediaField of component.media) {
-            const mediaType = mediaField.multiple ? 'number[]' : 'number'
-            lines.push(`  ${mediaField.name}?: ${mediaType} | null`)
-        }
-
-        // Add relations as ID or ID array
-        for (const rel of component.relations) {
-            const isArray =
-                rel.relationType === 'oneToMany' ||
-                rel.relationType === 'manyToMany'
-            const relType = isArray ? 'number[]' : 'number'
-            lines.push(`  ${rel.name}?: ${relType} | null`)
-        }
-
-        // Add nested components
-        for (const compField of component.components) {
-            const compType = compField.repeatable
-                ? `${compField.componentType}Input[]`
-                : `${compField.componentType}Input`
-            lines.push(`  ${compField.name}?: ${compType} | null`)
-        }
-
-        // Add dynamic zones
-        for (const dzField of component.dynamicZones) {
-            const dzType = `(${dzField.componentTypes.map(ct => `${ct}Input`).join(' | ')})[]`
-            lines.push(`  ${dzField.name}?: ${dzType} | null`)
-        }
-
-        lines.push('}')
-
-        return lines.join('\n')
+    private addComponentInterface(sf: SourceFile, component: Component): void {
+        sf.addInterface({
+            name: component.cleanName,
+            isExported: true,
+            properties: [
+                { name: 'id', type: 'number' },
+                ...component.attributes.map(attr => ({
+                    name: attr.name,
+                    type: this.transformer.toTypeScript(
+                        attr.type,
+                        attr.required,
+                    ),
+                })),
+                ...component.media.map(mediaField => {
+                    const mediaType = mediaField.multiple
+                        ? 'MediaFile[]'
+                        : 'MediaFile'
+                    const suffix = mediaField.required ? '' : ' | null'
+                    return {
+                        name: mediaField.name,
+                        type: `${mediaType}${suffix}`,
+                    }
+                }),
+                ...component.relations.map(rel => {
+                    const isArray =
+                        rel.relationType === 'oneToMany' ||
+                        rel.relationType === 'manyToMany'
+                    return {
+                        name: rel.name,
+                        type: isArray
+                            ? '{ id: number; documentId: string }[]'
+                            : '{ id: number; documentId: string } | null',
+                    }
+                }),
+                ...component.components.map(compField => {
+                    const compType = compField.repeatable
+                        ? `${compField.componentType}[]`
+                        : compField.componentType
+                    const suffix = compField.required ? '' : ' | null'
+                    return {
+                        name: compField.name,
+                        type: `${compType}${suffix}`,
+                    }
+                }),
+                ...component.dynamicZones.map(dzField => {
+                    const dzType = `(${dzField.componentTypes.join(' | ')})[]`
+                    const suffix = dzField.required ? '' : ' | null'
+                    return {
+                        name: dzField.name,
+                        type: `${dzType}${suffix}`,
+                    }
+                }),
+            ],
+        })
     }
 
-    private generateContentType(contentType: ContentType): string {
-        const lines: string[] = []
-
-        lines.push(`export interface ${contentType.cleanName} {`)
-
-        // Add nominal typing field to make types structurally unique
-        lines.push(`  readonly __typename?: '${contentType.cleanName}'`)
-
-        // Add base fields
-        lines.push('  id: number')
-        lines.push('  documentId: string')
-        lines.push('  createdAt: string')
-        lines.push('  updatedAt: string')
-
-        // Add custom attributes
-        for (const attr of contentType.attributes) {
-            const tsType = this.transformer.toTypeScript(
-                attr.type,
-                attr.required,
-            )
-            lines.push(`  ${attr.name}: ${tsType}`)
-        }
-
-        lines.push('}')
-
-        return lines.join('\n')
+    private addComponentInputInterface(
+        sf: SourceFile,
+        component: Component,
+    ): void {
+        sf.addInterface({
+            name: `${component.cleanName}Input`,
+            docs: [`Input type for creating/updating ${component.cleanName}`],
+            isExported: true,
+            properties: [
+                { name: 'id', type: 'number', hasQuestionToken: true },
+                ...component.attributes.map(attr => ({
+                    name: attr.name,
+                    type: this.transformer.toTypeScript(attr.type, false),
+                    hasQuestionToken: true,
+                })),
+                ...component.media.map(mediaField => ({
+                    name: mediaField.name,
+                    type: `${mediaField.multiple ? 'number[]' : 'number'} | null`,
+                    hasQuestionToken: true,
+                })),
+                ...component.relations.map(rel => {
+                    const isArray =
+                        rel.relationType === 'oneToMany' ||
+                        rel.relationType === 'manyToMany'
+                    return {
+                        name: rel.name,
+                        type: `${isArray ? 'number[]' : 'number'} | null`,
+                        hasQuestionToken: true,
+                    }
+                }),
+                ...component.components.map(compField => {
+                    const compType = compField.repeatable
+                        ? `${compField.componentType}Input[]`
+                        : `${compField.componentType}Input`
+                    return {
+                        name: compField.name,
+                        type: `${compType} | null`,
+                        hasQuestionToken: true,
+                    }
+                }),
+                ...component.dynamicZones.map(dzField => ({
+                    name: dzField.name,
+                    type: `(${dzField.componentTypes.map(ct => `${ct}Input`).join(' | ')})[] | null`,
+                    hasQuestionToken: true,
+                })),
+            ],
+        })
     }
 
-    private generateInputType(contentType: ContentType): string {
-        const lines: string[] = []
-
-        lines.push(
-            `// Input type for creating/updating ${contentType.cleanName}`,
-        )
-        lines.push(`export interface ${contentType.cleanName}Input {`)
-
-        // Add scalar attributes (all optional for partial updates)
-        for (const attr of contentType.attributes) {
-            const tsType = this.transformer.toTypeScript(attr.type, false) // Always optional
-            lines.push(`  ${attr.name}?: ${tsType}`)
-        }
-
-        // Add media fields as ID or ID array
-        for (const mediaField of contentType.media) {
-            const mediaType = mediaField.multiple ? 'number[]' : 'number'
-            lines.push(`  ${mediaField.name}?: ${mediaType} | null`)
-        }
-
-        // Add relations as ID or ID array
-        for (const rel of contentType.relations) {
-            const isArray =
-                rel.relationType === 'oneToMany' ||
-                rel.relationType === 'manyToMany'
-            const relType = isArray ? 'number[]' : 'number'
-            lines.push(`  ${rel.name}?: ${relType} | null`)
-        }
-
-        // Add components as objects (using component type, but with optional fields)
-        for (const compField of contentType.components) {
-            const compType = compField.repeatable
-                ? `${compField.componentType}Input[]`
-                : `${compField.componentType}Input`
-            lines.push(`  ${compField.name}?: ${compType} | null`)
-        }
-
-        // Add dynamic zones
-        for (const dzField of contentType.dynamicZones) {
-            const dzType = `(${dzField.componentTypes.map(ct => `${ct}Input`).join(' | ')})[]`
-            lines.push(`  ${dzField.name}?: ${dzType} | null`)
-        }
-
-        lines.push('}')
-
-        return lines.join('\n')
+    private addContentTypeInterface(
+        sf: SourceFile,
+        contentType: ContentType,
+    ): void {
+        sf.addInterface({
+            name: contentType.cleanName,
+            isExported: true,
+            properties: [
+                {
+                    name: '__typename',
+                    type: `'${contentType.cleanName}'`,
+                    isReadonly: true,
+                    hasQuestionToken: true,
+                },
+                { name: 'id', type: 'number' },
+                { name: 'documentId', type: 'string' },
+                { name: 'createdAt', type: 'string' },
+                { name: 'updatedAt', type: 'string' },
+                ...contentType.attributes.map(attr => ({
+                    name: attr.name,
+                    type: this.transformer.toTypeScript(
+                        attr.type,
+                        attr.required,
+                    ),
+                })),
+            ],
+        })
     }
 
-    private generatePopulateParams(schema: ParsedSchema): string {
-        const lines: string[] = []
+    private addInputTypeInterface(
+        sf: SourceFile,
+        contentType: ContentType,
+    ): void {
+        sf.addInterface({
+            name: `${contentType.cleanName}Input`,
+            docs: [`Input type for creating/updating ${contentType.cleanName}`],
+            isExported: true,
+            properties: [
+                ...contentType.attributes.map(attr => ({
+                    name: attr.name,
+                    type: this.transformer.toTypeScript(attr.type, false),
+                    hasQuestionToken: true,
+                })),
+                ...contentType.media.map(mediaField => ({
+                    name: mediaField.name,
+                    type: `${mediaField.multiple ? 'number[]' : 'number'} | null`,
+                    hasQuestionToken: true,
+                })),
+                ...contentType.relations.map(rel => {
+                    const isArray =
+                        rel.relationType === 'oneToMany' ||
+                        rel.relationType === 'manyToMany'
+                    return {
+                        name: rel.name,
+                        type: `${isArray ? 'number[]' : 'number'} | null`,
+                        hasQuestionToken: true,
+                    }
+                }),
+                ...contentType.components.map(compField => {
+                    const compType = compField.repeatable
+                        ? `${compField.componentType}Input[]`
+                        : `${compField.componentType}Input`
+                    return {
+                        name: compField.name,
+                        type: `${compType} | null`,
+                        hasQuestionToken: true,
+                    }
+                }),
+                ...contentType.dynamicZones.map(dzField => ({
+                    name: dzField.name,
+                    type: `(${dzField.componentTypes.map(ct => `${ct}Input`).join(' | ')})[] | null`,
+                    hasQuestionToken: true,
+                })),
+            ],
+        })
+    }
 
-        lines.push('// ============================================')
-        lines.push('// PopulateParam types for type-safe populate')
-        lines.push('// ============================================')
-        lines.push('')
+    private addPopulateParams(sf: SourceFile, schema: ParsedSchema): void {
+        sf.addStatements([
+            '// ============================================',
+            '// PopulateParam types for type-safe populate',
+            '// ============================================',
+        ])
 
         // Generate for components with populatable fields
         for (const component of schema.components) {
-            const result = this.generatePopulateParamForType(component)
-            if (result) {
-                lines.push(result)
-                lines.push('')
+            const typeBody = this.buildPopulateParamTypeBody(component)
+            if (typeBody) {
+                sf.addTypeAlias({
+                    name: `${component.cleanName}PopulateParam`,
+                    isExported: true,
+                    type: typeBody,
+                })
             }
         }
 
         // Generate for content types with populatable fields
         for (const contentType of schema.contentTypes) {
-            const result = this.generatePopulateParamForType(contentType)
-            if (result) {
-                lines.push(result)
-                lines.push('')
+            const typeBody = this.buildPopulateParamTypeBody(contentType)
+            if (typeBody) {
+                sf.addTypeAlias({
+                    name: `${contentType.cleanName}PopulateParam`,
+                    isExported: true,
+                    type: typeBody,
+                })
             }
         }
-
-        return lines.join('\n')
     }
 
-    private generatePopulateParamForType(
+    private buildPopulateParamTypeBody(
         type: ContentType | Component,
     ): string | null {
-        const populatableFields: string[] = []
+        const fields: string[] = []
 
-        // Collect all populatable field entries
         for (const rel of type.relations) {
             const t = rel.targetType
             const targetHasPopulate = this.hasPopulatableFields(t)
@@ -467,13 +458,11 @@ export interface LinkInline {
             options.push(`sort?: _SortValue<${t}> | _SortValue<${t}>[]`)
             options.push(`limit?: number`)
             options.push(`start?: number`)
-            populatableFields.push(
-                `  ${rel.name}?: true | { ${options.join('; ')} }`,
-            )
+            fields.push(`  ${rel.name}?: true | { ${options.join('; ')} }`)
         }
 
         for (const media of type.media) {
-            populatableFields.push(
+            fields.push(
                 `  ${media.name}?: true | { fields?: (keyof MediaFile & string)[] }`,
             )
         }
@@ -487,13 +476,10 @@ export interface LinkInline {
                     `populate?: ${t}PopulateParam | (keyof ${t}PopulateParam & string)[] | '*'`,
                 )
             }
-            populatableFields.push(
-                `  ${comp.name}?: true | { ${options.join('; ')} }`,
-            )
+            fields.push(`  ${comp.name}?: true | { ${options.join('; ')} }`)
         }
 
         for (const dz of type.dynamicZones) {
-            // Dynamic zone: support Strapi v5 "on" fragment syntax
             const onEntries: string[] = []
             for (let i = 0; i < dz.components.length; i++) {
                 const uid = dz.components[i]
@@ -507,122 +493,76 @@ export interface LinkInline {
                 }
                 onEntries.push(`'${uid}'?: true | { ${options.join('; ')} }`)
             }
-            populatableFields.push(
+            fields.push(
                 `  ${dz.name}?: true | { on?: { ${onEntries.join('; ')} } }`,
             )
         }
 
-        if (populatableFields.length === 0) return null
+        if (fields.length === 0) return null
 
-        const lines: string[] = []
-        lines.push(`export type ${type.cleanName}PopulateParam = {`)
-        lines.push(...populatableFields)
-        lines.push('}')
-        return lines.join('\n')
+        return `{\n${fields.join('\n')}\n}`
     }
 
-    private generatePayloadUtilityTypes(schema: ParsedSchema): string {
-        const lines: string[] = []
-
-        lines.push('// Prisma-like Payload types for populate support')
-        lines.push('// These types allow type-safe population of relations')
-        lines.push('//')
-        lines.push('// Usage example:')
-        lines.push(
-            '// type ItemWithCategory = ItemGetPayload<{ populate: { category: true } }>',
-        )
-        lines.push(
-            '// const items = await strapi.items.find({ populate: { category: true } }) as ItemWithCategory[]',
-        )
-        lines.push('//')
-        lines.push(
-            '// This ensures that relations are only included in the type when populate is used',
-        )
-        lines.push('')
+    private addPayloadUtilityTypes(sf: SourceFile, schema: ParsedSchema): void {
+        sf.addStatements(`// Prisma-like Payload types for populate support
+// These types allow type-safe population of relations
+//
+// Usage example:
+// type ItemWithCategory = ItemGetPayload<{ populate: { category: true } }>
+// const items = await strapi.items.find({ populate: { category: true } }) as ItemWithCategory[]
+//
+// This ensures that relations are only included in the type when populate is used`)
 
         // Generate GetPayload type for each component with populatable fields
         for (const component of schema.components) {
-            const hasPopulatableFields =
-                component.relations.length > 0 ||
-                component.media.length > 0 ||
-                component.components.length > 0 ||
-                component.dynamicZones.length > 0
-
-            if (hasPopulatableFields) {
-                lines.push(this.generateComponentGetPayloadType(component))
-                lines.push('')
+            if (this.hasAnyPopulatableFields(component)) {
+                sf.addStatements(this.buildGetPayloadType(component))
             }
         }
 
         // Generate GetPayload type for each content type with populatable fields
         for (const contentType of schema.contentTypes) {
-            const hasPopulatableFields =
-                contentType.relations.length > 0 ||
-                contentType.media.length > 0 ||
-                contentType.components.length > 0 ||
-                contentType.dynamicZones.length > 0
-
-            if (hasPopulatableFields) {
-                lines.push(this.generateGetPayloadType(contentType))
-                lines.push('')
+            if (this.hasAnyPopulatableFields(contentType)) {
+                sf.addStatements(this.buildGetPayloadType(contentType))
             }
         }
-
-        return lines.join('\n')
     }
 
-    private generateGetPayloadType(contentType: ContentType): string {
-        const lines: string[] = []
+    private buildGetPayloadType(type: ContentType | Component): string {
+        const name = type.cleanName
 
-        lines.push(
-            `// Payload type for ${contentType.cleanName} with populate support`,
-        )
-        lines.push(
-            `export type ${contentType.cleanName}GetPayload<P extends { populate?: any } = {}> =`,
-        )
-        lines.push(`  ${contentType.cleanName} &`)
-
-        const hasPopulatableFields =
-            contentType.relations.length > 0 ||
-            contentType.media.length > 0 ||
-            contentType.components.length > 0 ||
-            contentType.dynamicZones.length > 0
-
-        if (!hasPopulatableFields) {
-            lines.push(`  {}`)
-        } else {
-            lines.push(`  (P extends { populate: infer Pop }`)
-
-            // Branch 1: Pop extends '*' | true → populate ALL fields (1 level deep)
-            lines.push(`    ? Pop extends '*' | true`)
-            lines.push(`      ? {`)
-            this.generateAllPopulatedFields(lines, contentType)
-            lines.push(`        }`)
-
-            // Branch 2: Pop is a string array → check field name in array values
-            lines.push(`      : Pop extends readonly (infer _)[]`)
-            lines.push(`        ? {`)
-            this.generateArrayPopulatedFields(lines, contentType)
-            lines.push(`          }`)
-
-            // Branch 3: Pop is an object → per-field conditional populate
-            lines.push(`        : {`)
-            this.generatePerFieldPopulate(lines, contentType)
-            lines.push(`          }`)
-
-            lines.push(`    : {})`)
+        if (!this.hasAnyPopulatableFields(type)) {
+            return `export type ${name}GetPayload<P extends { populate?: any } = {}> = ${name} & {}`
         }
 
-        return lines.join('\n')
+        const allPopFields = this.buildAllPopulatedFields(type)
+        const arrayPopFields = this.buildArrayPopulatedFields(type)
+        const perFieldPop = this.buildPerFieldPopulate(type)
+
+        return `// Payload type for ${name} with populate support
+export type ${name}GetPayload<P extends { populate?: any } = {}> =
+  ${name} &
+  (P extends { populate: infer Pop }
+    ? Pop extends '*' | true
+      ? {
+${allPopFields}
+        }
+      : Pop extends readonly (infer _)[]
+        ? {
+${arrayPopFields}
+          }
+        : {
+${perFieldPop}
+          }
+    : {})`
     }
 
     /**
-     * Generate fields for populate: '*' | true — all populatable fields with base types
+     * Build fields for populate: '*' | true — all populatable fields with base types
      */
-    private generateAllPopulatedFields(
-        lines: string[],
-        type: ContentType | Component,
-    ): void {
+    private buildAllPopulatedFields(type: ContentType | Component): string {
+        const fields: string[] = []
+
         for (const rel of type.relations) {
             const isNullable =
                 rel.relationType === 'oneToOne' ||
@@ -632,37 +572,37 @@ export interface LinkInline {
                 rel.relationType === 'manyToMany'
             const nullSuffix = isNullable ? ' | null' : ''
             const arraySuffix = isArray ? '[]' : ''
-            lines.push(
+            fields.push(
                 `          ${rel.name}?: ${rel.targetType}${arraySuffix}${nullSuffix}`,
             )
         }
 
         for (const mediaField of type.media) {
             const mediaType = mediaField.multiple ? 'MediaFile[]' : 'MediaFile'
-            lines.push(`          ${mediaField.name}?: ${mediaType}`)
+            fields.push(`          ${mediaField.name}?: ${mediaType}`)
         }
 
         for (const componentField of type.components) {
             const arraySuffix = componentField.repeatable ? '[]' : ''
-            lines.push(
+            fields.push(
                 `          ${componentField.name}?: ${componentField.componentType}${arraySuffix}`,
             )
         }
 
         for (const dzField of type.dynamicZones) {
             const unionType = dzField.componentTypes.join(' | ')
-            lines.push(`          ${dzField.name}?: (${unionType})[]`)
+            fields.push(`          ${dzField.name}?: (${unionType})[]`)
         }
+
+        return fields.join('\n')
     }
 
     /**
-     * Generate fields for array-style populate (e.g. populate: ['category', 'image'])
-     * Each field checks if its name is in Pop[number]
+     * Build fields for array-style populate (e.g. populate: ['category', 'image'])
      */
-    private generateArrayPopulatedFields(
-        lines: string[],
-        type: ContentType | Component,
-    ): void {
+    private buildArrayPopulatedFields(type: ContentType | Component): string {
+        const fields: string[] = []
+
         for (const rel of type.relations) {
             const isNullable =
                 rel.relationType === 'oneToOne' ||
@@ -672,40 +612,41 @@ export interface LinkInline {
                 rel.relationType === 'manyToMany'
             const nullSuffix = isNullable ? ' | null' : ''
             const arraySuffix = isArray ? '[]' : ''
-            lines.push(
+            fields.push(
                 `            ${rel.name}?: '${rel.name}' extends Pop[number] ? ${rel.targetType}${arraySuffix}${nullSuffix} : never`,
             )
         }
 
         for (const mediaField of type.media) {
             const mediaType = mediaField.multiple ? 'MediaFile[]' : 'MediaFile'
-            lines.push(
+            fields.push(
                 `            ${mediaField.name}?: '${mediaField.name}' extends Pop[number] ? ${mediaType} : never`,
             )
         }
 
         for (const componentField of type.components) {
             const arraySuffix = componentField.repeatable ? '[]' : ''
-            lines.push(
+            fields.push(
                 `            ${componentField.name}?: '${componentField.name}' extends Pop[number] ? ${componentField.componentType}${arraySuffix} : never`,
             )
         }
 
         for (const dzField of type.dynamicZones) {
             const unionType = dzField.componentTypes.join(' | ')
-            lines.push(
+            fields.push(
                 `            ${dzField.name}?: '${dzField.name}' extends Pop[number] ? (${unionType})[] : never`,
             )
         }
+
+        return fields.join('\n')
     }
 
     /**
-     * Generate per-field conditional populate for object-style populate params
+     * Build per-field conditional populate for object-style populate params
      */
-    private generatePerFieldPopulate(
-        lines: string[],
-        type: ContentType | Component,
-    ): void {
+    private buildPerFieldPopulate(type: ContentType | Component): string {
+        const fields: string[] = []
+
         for (const rel of type.relations) {
             const isNullable =
                 rel.relationType === 'oneToOne' ||
@@ -718,24 +659,18 @@ export interface LinkInline {
             const arraySuffix = isArray ? '[]' : ''
             const hasPopulate = this.hasPopulatableFields(baseType)
 
-            lines.push(
-                `          ${rel.name}?: '${rel.name}' extends keyof Pop`,
+            const resolvedType = hasPopulate
+                ? `_ApplyFields<Pop['${rel.name}'] extends { populate: infer NestedPop } ? ${baseType}GetPayload<{ populate: NestedPop }> : ${baseType}, ${baseType}, Pop['${rel.name}']>${arraySuffix}${nullSuffix}`
+                : `_ApplyFields<${baseType}, ${baseType}, Pop['${rel.name}']>${arraySuffix}${nullSuffix}`
+
+            fields.push(
+                `          ${rel.name}?: '${rel.name}' extends keyof Pop\n            ? ${resolvedType}\n            : never`,
             )
-            if (hasPopulate) {
-                lines.push(
-                    `            ? _ApplyFields<Pop['${rel.name}'] extends { populate: infer NestedPop } ? ${baseType}GetPayload<{ populate: NestedPop }> : ${baseType}, ${baseType}, Pop['${rel.name}']>${arraySuffix}${nullSuffix}`,
-                )
-            } else {
-                lines.push(
-                    `            ? _ApplyFields<${baseType}, ${baseType}, Pop['${rel.name}']>${arraySuffix}${nullSuffix}`,
-                )
-            }
-            lines.push(`            : never`)
         }
 
         for (const mediaField of type.media) {
             const arraySuffix = mediaField.multiple ? '[]' : ''
-            lines.push(
+            fields.push(
                 `          ${mediaField.name}?: '${mediaField.name}' extends keyof Pop ? _ApplyFields<MediaFile, MediaFile, Pop['${mediaField.name}']>${arraySuffix} : never`,
             )
         }
@@ -745,73 +680,33 @@ export interface LinkInline {
             const arraySuffix = componentField.repeatable ? '[]' : ''
             const hasPopulate = this.hasPopulatableFields(baseType)
 
-            lines.push(
-                `          ${componentField.name}?: '${componentField.name}' extends keyof Pop`,
+            const resolvedType = hasPopulate
+                ? `_ApplyFields<Pop['${componentField.name}'] extends { populate: infer NestedPop } ? ${baseType}GetPayload<{ populate: NestedPop }> : ${baseType}, ${baseType}, Pop['${componentField.name}']>${arraySuffix}`
+                : `_ApplyFields<${baseType}, ${baseType}, Pop['${componentField.name}']>${arraySuffix}`
+
+            fields.push(
+                `          ${componentField.name}?: '${componentField.name}' extends keyof Pop\n            ? ${resolvedType}\n            : never`,
             )
-            if (hasPopulate) {
-                lines.push(
-                    `            ? _ApplyFields<Pop['${componentField.name}'] extends { populate: infer NestedPop } ? ${baseType}GetPayload<{ populate: NestedPop }> : ${baseType}, ${baseType}, Pop['${componentField.name}']>${arraySuffix}`,
-                )
-            } else {
-                lines.push(
-                    `            ? _ApplyFields<${baseType}, ${baseType}, Pop['${componentField.name}']>${arraySuffix}`,
-                )
-            }
-            lines.push(`            : never`)
         }
 
         for (const dzField of type.dynamicZones) {
             const unionType = dzField.componentTypes.join(' | ')
             const dzType = `(${unionType})[]`
-            lines.push(
+            fields.push(
                 `          ${dzField.name}?: '${dzField.name}' extends keyof Pop ? ${dzType} : never`,
             )
         }
+
+        return fields.join('\n')
     }
 
-    private generateComponentGetPayloadType(component: Component): string {
-        const lines: string[] = []
-
-        lines.push(
-            `// Payload type for ${component.cleanName} with populate support`,
+    private hasAnyPopulatableFields(type: ContentType | Component): boolean {
+        return (
+            type.relations.length > 0 ||
+            type.media.length > 0 ||
+            type.components.length > 0 ||
+            type.dynamicZones.length > 0
         )
-        lines.push(
-            `export type ${component.cleanName}GetPayload<P extends { populate?: any } = {}> =`,
-        )
-        lines.push(`  ${component.cleanName} &`)
-
-        const hasPopulatableFields =
-            component.relations.length > 0 ||
-            component.media.length > 0 ||
-            component.components.length > 0 ||
-            component.dynamicZones.length > 0
-
-        if (!hasPopulatableFields) {
-            lines.push(`  {}`)
-        } else {
-            lines.push(`  (P extends { populate: infer Pop }`)
-
-            // Branch 1: Pop extends '*' | true → populate ALL fields (1 level deep)
-            lines.push(`    ? Pop extends '*' | true`)
-            lines.push(`      ? {`)
-            this.generateAllPopulatedFields(lines, component)
-            lines.push(`        }`)
-
-            // Branch 2: Pop is a string array → check field name in array values
-            lines.push(`      : Pop extends readonly (infer _)[]`)
-            lines.push(`        ? {`)
-            this.generateArrayPopulatedFields(lines, component)
-            lines.push(`          }`)
-
-            // Branch 3: Pop is an object → per-field conditional populate
-            lines.push(`        : {`)
-            this.generatePerFieldPopulate(lines, component)
-            lines.push(`          }`)
-
-            lines.push(`    : {})`)
-        }
-
-        return lines.join('\n')
     }
 
     /**
@@ -825,12 +720,7 @@ export interface LinkInline {
             ct => ct.cleanName === typeName,
         )
         if (contentType) {
-            return (
-                contentType.relations.length > 0 ||
-                contentType.media.length > 0 ||
-                contentType.components.length > 0 ||
-                contentType.dynamicZones.length > 0
-            )
+            return this.hasAnyPopulatableFields(contentType)
         }
 
         // Check in components
@@ -838,12 +728,7 @@ export interface LinkInline {
             comp => comp.cleanName === typeName,
         )
         if (component) {
-            return (
-                component.relations.length > 0 ||
-                component.media.length > 0 ||
-                component.components.length > 0 ||
-                component.dynamicZones.length > 0
-            )
+            return this.hasAnyPopulatableFields(component)
         }
 
         return false

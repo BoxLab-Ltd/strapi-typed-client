@@ -3,10 +3,11 @@
  * Generates type-safe filter interfaces for Strapi entities
  */
 
+import { Project } from 'ts-morph'
 import { ParsedSchema, ContentType, Attribute } from '../../schema-types.js'
 
 /**
- * Generate filter utility types
+ * Generate filter utility types (static block)
  */
 export function generateFilterUtilityTypes(): string {
     return `// ============================================
@@ -145,86 +146,102 @@ function getFilterTypeForAttribute(attr: Attribute): string {
 }
 
 /**
+ * Build filter interface properties for a content type
+ */
+function buildFilterProperties(ct: ContentType) {
+    return [
+        {
+            name: 'id',
+            type: 'number | IdFilterOperators',
+            hasQuestionToken: true,
+        },
+        {
+            name: 'documentId',
+            type: 'string | StringFilterOperators',
+            hasQuestionToken: true,
+        },
+        ...ct.attributes.map(attr => ({
+            name: attr.name,
+            type: getFilterTypeForAttribute(attr),
+            hasQuestionToken: true,
+        })),
+        ...ct.relations.map(rel => ({
+            name: rel.name,
+            type: '{ id?: number | IdFilterOperators; documentId?: string | StringFilterOperators; [key: string]: any }',
+            hasQuestionToken: true,
+        })),
+        ...ct.media.map(media => ({
+            name: media.name,
+            type: '{ id?: number | IdFilterOperators; [key: string]: any }',
+            hasQuestionToken: true,
+        })),
+    ]
+}
+
+/**
  * Generate filter interface for a single content type
  */
 export function generateEntityFilters(ct: ContentType): string {
-    const lines: string[] = []
-    const filterName = `${ct.cleanName}Filters`
+    const project = new Project({ useInMemoryFileSystem: true })
+    const sf = project.createSourceFile('filters.ts')
 
-    lines.push(`/** Type-safe filters for ${ct.cleanName} */`)
-    lines.push(
-        `export interface ${filterName} extends LogicalOperators<${filterName}> {`,
-    )
+    sf.addInterface({
+        name: `${ct.cleanName}Filters`,
+        isExported: true,
+        extends: [`LogicalOperators<${ct.cleanName}Filters>`],
+        docs: [`Type-safe filters for ${ct.cleanName}`],
+        properties: buildFilterProperties(ct),
+    })
 
-    // Add id and documentId filters
-    lines.push('  id?: number | IdFilterOperators')
-    lines.push('  documentId?: string | StringFilterOperators')
-
-    // Add filters for each attribute
-    for (const attr of ct.attributes) {
-        const filterType = getFilterTypeForAttribute(attr)
-        const optional = '?'
-        lines.push(`  ${attr.name}${optional}: ${filterType}`)
-    }
-
-    // Add filters for relations (simplified - just id filtering)
-    for (const rel of ct.relations) {
-        // For relations, allow filtering by id or nested filters
-        lines.push(`  ${rel.name}?: {`)
-        lines.push(`    id?: number | IdFilterOperators`)
-        lines.push(`    documentId?: string | StringFilterOperators`)
-        lines.push(`    [key: string]: any`)
-        lines.push(`  }`)
-    }
-
-    // Add filters for media (by id)
-    for (const media of ct.media) {
-        lines.push(`  ${media.name}?: {`)
-        lines.push(`    id?: number | IdFilterOperators`)
-        lines.push(`    [key: string]: any`)
-        lines.push(`  }`)
-    }
-
-    lines.push('}')
-
-    return lines.join('\n')
+    return sf.getFullText()
 }
 
 /**
  * Generate all filter interfaces for the schema
  */
 export function generateAllFilters(schema: ParsedSchema): string {
-    const lines: string[] = []
+    const project = new Project({ useInMemoryFileSystem: true })
+    const sf = project.createSourceFile('all-filters.ts')
 
-    // Add utility types
-    lines.push(generateFilterUtilityTypes())
-    lines.push('')
+    // Add utility types (static block)
+    sf.addStatements(generateFilterUtilityTypes())
 
     // Generate filter interface for each content type
     for (const ct of schema.contentTypes) {
-        lines.push(generateEntityFilters(ct))
-        lines.push('')
+        sf.addInterface({
+            name: `${ct.cleanName}Filters`,
+            isExported: true,
+            extends: [`LogicalOperators<${ct.cleanName}Filters>`],
+            docs: [`Type-safe filters for ${ct.cleanName}`],
+            properties: buildFilterProperties(ct),
+        })
     }
 
-    // Generate union type of all filters (useful for generic functions)
+    // Generate union type of all filters
     const filterNames = schema.contentTypes.map(ct => `${ct.cleanName}Filters`)
-    lines.push(`/** Union of all entity filters */`)
-    lines.push(`export type AnyEntityFilters = ${filterNames.join(' | ')}`)
-    lines.push('')
+    sf.addTypeAlias({
+        name: 'AnyEntityFilters',
+        isExported: true,
+        type: filterNames.join(' | '),
+        docs: ['Union of all entity filters'],
+    })
 
-    // Generate a mapping type from entity to its filters
-    lines.push(`/** Map from entity type to its filter type */`)
-    lines.push(`export type EntityFiltersMap = {`)
-    for (const ct of schema.contentTypes) {
-        lines.push(`  ${ct.cleanName}: ${ct.cleanName}Filters`)
-    }
-    lines.push(`}`)
+    // Generate mapping type
+    sf.addInterface({
+        name: 'EntityFiltersMap',
+        isExported: true,
+        docs: ['Map from entity type to its filter type'],
+        properties: schema.contentTypes.map(ct => ({
+            name: ct.cleanName,
+            type: `${ct.cleanName}Filters`,
+        })),
+    })
 
-    return lines.join('\n')
+    return sf.getFullText()
 }
 
 /**
- * Generate typed QueryParams interface
+ * Generate typed QueryParams interface (static block)
  */
 export function generateTypedQueryParams(): string {
     return `// ============================================

@@ -24,14 +24,9 @@ export class CustomApiGenerator {
         routes: ParsedRoute[],
         isStandalone: boolean = false,
     ): string {
-        const lines: string[] = []
-
-        for (const route of routes) {
-            lines.push('')
-            lines.push(this.generateCustomMethod(route, isStandalone))
-        }
-
-        return lines.join('\n')
+        return routes
+            .map(route => '\n' + this.generateCustomMethod(route, isStandalone))
+            .join('\n')
     }
 
     /**
@@ -45,99 +40,59 @@ export class CustomApiGenerator {
             return ''
         }
 
-        const lines: string[] = []
-        lines.push('// Custom API namespace types')
-        lines.push('')
-
-        for (const typeDef of this.customTypes.typeDefinitions) {
-            // Type definitions are already complete (with export), just add them
-            lines.push(typeDef)
-            lines.push('')
-        }
-
-        return lines.join('\n')
+        return (
+            '// Custom API namespace types\n\n' +
+            this.customTypes.typeDefinitions.map(td => td + '\n').join('\n')
+        )
     }
 
     private generateCustomMethod(
         route: ParsedRoute,
         isStandalone: boolean = false,
     ): string {
-        const lines: string[] = []
-
-        // Get custom types for this handler
         const customType = this.customTypes?.types.get(route.handler)
         const inputType = customType?.inputType || 'any'
         const outputType = customType?.outputType || 'any'
-
-        // Generate JSDoc comment
-        lines.push('  /**')
-        lines.push(`   * ${route.method} ${route.path}`)
-        lines.push(`   * Handler: ${route.handler}`)
-        lines.push('   */')
-
-        // Generate method signature
         const methodName = toCamelCase(route.action)
         const params = this.generateMethodParams(route, inputType)
-
-        lines.push(`  async ${methodName}(${params}): Promise<${outputType}> {`)
-
-        // Generate method body
         const hasBody =
             route.method === 'POST' ||
             route.method === 'PUT' ||
             route.method === 'PATCH'
 
-        // Build full URL with baseURL and /api/ prefix
-        if (isStandalone) {
-            // For standalone APIs, use the full path directly
-            const pathExpression = this.generateStandalonePathExpression(route)
-            lines.push(
-                `    const url = \`\${this.config.baseURL}/api${pathExpression}\``,
-            )
-        } else {
-            // For collection APIs, combine endpoint with path expression
-            const pathExpression = this.generatePathExpression(route)
-            lines.push(
-                `    const url = \`\${this.config.baseURL}/api/\${this.endpoint}${pathExpression}\``,
-            )
-        }
+        const urlExpression = isStandalone
+            ? `\`\${this.config.baseURL}/api${this.generateStandalonePathExpression(route)}\``
+            : `\`\${this.config.baseURL}/api/\${this.endpoint}${this.generatePathExpression(route)}\``
 
-        if (hasBody) {
-            lines.push(
-                `    // If data is FormData, use it directly; otherwise JSON stringify`,
-            )
-            lines.push(`    const body = data instanceof FormData`)
-            lines.push(`      ? data`)
-            lines.push(`      : data ? JSON.stringify(data) : undefined`)
-            lines.push(``)
-            lines.push(
-                `    const response = await this.request<StrapiResponse<${outputType}>>(`,
-            )
-            lines.push(`      url,`)
-            lines.push(`      {`)
-            lines.push(`        method: '${route.method}',`)
-            lines.push(`        body,`)
-            lines.push(`      }`)
-            lines.push(`    )`)
-        } else if (route.method === 'GET') {
-            // For GET methods, no need to specify method or options
-            lines.push(
-                `    const response = await this.request<StrapiResponse<${outputType}>>(url)`,
-            )
-        } else {
-            // For DELETE and other methods without body
-            lines.push(
-                `    const response = await this.request<StrapiResponse<${outputType}>>(`,
-            )
-            lines.push(`      url,`)
-            lines.push(`      { method: '${route.method}' }`)
-            lines.push(`    )`)
-        }
+        const bodyBlock = hasBody
+            ? `    // If data is FormData, use it directly; otherwise JSON stringify
+    const body = data instanceof FormData
+      ? data
+      : data ? JSON.stringify(data) : undefined
 
-        lines.push(`    return response.data`)
-        lines.push(`  }`)
+    const response = await this.request<StrapiResponse<${outputType}>>(
+      url,
+      {
+        method: '${route.method}',
+        body,
+      }
+    )`
+            : route.method === 'GET'
+              ? `    const response = await this.request<StrapiResponse<${outputType}>>(url)`
+              : `    const response = await this.request<StrapiResponse<${outputType}>>(
+      url,
+      { method: '${route.method}' }
+    )`
 
-        return lines.join('\n')
+        return `  /**
+   * ${route.method} ${route.path}
+   * Handler: ${route.handler}
+   */
+  async ${methodName}(${params}): Promise<${outputType}> {
+    const url = ${urlExpression}
+${bodyBlock}
+    return response.data
+  }`
     }
 
     private generateMethodParams(
@@ -189,7 +144,6 @@ export class CustomApiGenerator {
 
     private generateStandalonePathExpression(route: ParsedRoute): string {
         // For standalone routes, use the full path directly
-        // Convert '/subscription/assign' to '/subscription/assign'
         // Convert ':param' to '${param}'
         let pathTemplate = route.path
 

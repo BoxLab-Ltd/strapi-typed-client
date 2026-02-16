@@ -1,3 +1,4 @@
+import { Project, SourceFile } from 'ts-morph'
 import { ParsedSchema, ContentType } from '../schema-types.js'
 import { TypeTransformer } from '../transformer/index.js'
 import { AuthApiGenerator } from './auth-api-generator.js'
@@ -36,7 +37,8 @@ export class ClientGenerator {
         endpoints?: ParsedEndpoint[],
         extraTypes?: ExtraControllerType[],
     ): string {
-        const lines: string[] = []
+        const project = new Project({ useInMemoryFileSystem: true })
+        const sf = project.createSourceFile('client.ts')
 
         // Parse custom routes and custom types
         let parsedRoutes: ParsedRoutes | undefined
@@ -59,57 +61,51 @@ export class ClientGenerator {
             this.customApiGenerator.setCustomTypes(customTypes)
         }
 
-        // Add header comment
-        lines.push('// Auto-generated Strapi API client')
-        lines.push('// Do not edit manually')
-        lines.push('')
+        // Header comments
+        sf.addStatements([
+            '// Auto-generated Strapi API client',
+            '// Do not edit manually',
+        ])
 
-        // Add imports
-        lines.push(this.generateImports(schema))
-        lines.push('')
+        // Imports
+        sf.addStatements(this.generateImports(schema))
 
-        // Add custom type definitions (if any)
+        // Custom type definitions (if any)
         const customTypeDefs = this.customApiGenerator.generateTypeDefinitions()
         if (customTypeDefs) {
-            lines.push(customTypeDefs)
-            lines.push('')
+            sf.addStatements(customTypeDefs)
         }
 
-        // Generate utility types
-        lines.push(this.generateUtilityTypes(schema))
-        lines.push('')
+        // Utility types
+        this.addUtilityTypes(sf, schema)
 
-        // Generate auth types
-        lines.push(this.authApiGenerator.generateAuthTypes())
-        lines.push('')
+        // Auth types
+        sf.addStatements(this.authApiGenerator.generateAuthTypes())
 
-        // Generate CollectionAPI class
-        lines.push(this.generateCollectionAPI())
-        lines.push('')
+        // CollectionAPI class (static block)
+        sf.addStatements(this.generateCollectionAPI())
 
-        // Generate SingleTypeAPI class
-        lines.push(this.generateSingleTypeAPI())
-        lines.push('')
+        // SingleTypeAPI class (static block)
+        sf.addStatements(this.generateSingleTypeAPI())
 
-        // Generate custom API classes (for collections with custom routes)
+        // Custom API classes (for collections with custom routes)
         if (parsedRoutes) {
-            lines.push(this.generateCustomAPIClasses(schema, parsedRoutes))
-            lines.push('')
+            sf.addStatements(
+                this.generateCustomAPIClasses(schema, parsedRoutes),
+            )
         }
 
-        // Generate AuthAPI class (with dynamic methods if auth/user routes found)
+        // AuthAPI class (with dynamic methods if auth/user routes found)
         const authRoutes = parsedRoutes?.byController.get('auth') || []
         const userRoutes = parsedRoutes?.byController.get('user') || []
-        lines.push(
+        sf.addStatements(
             this.authApiGenerator.generateAuthApiClass(authRoutes, userRoutes),
         )
-        lines.push('')
 
-        // Generate main StrapiClient class
-        lines.push(this.generateStrapiClient(schema, parsedRoutes))
-        lines.push('')
+        // Main StrapiClient class
+        sf.addStatements(this.generateStrapiClient(schema, parsedRoutes))
 
-        return lines.join('\n')
+        return sf.getFullText()
     }
 
     private generateImports(schema: ParsedSchema): string {
@@ -149,7 +145,6 @@ export class ClientGenerator {
 
         // Ensure UserPopulateParam is imported (for AuthAPI me/updateMe overloads)
         if (!imports.includes('UserPopulateParam')) {
-            // Check if User has populatable fields
             const userCt = schema.contentTypes.find(
                 ct => ct.cleanName === 'User',
             )
@@ -185,222 +180,311 @@ import type { ${filterImports.join(', ')} } from './types.js'
 import qs from 'qs'`
     }
 
-    private generateUtilityTypes(schema: ParsedSchema): string {
-        const lines: string[] = []
+    private addUtilityTypes(sf: SourceFile, schema: ParsedSchema): void {
+        // StrapiResponse interface
+        sf.addInterface({
+            name: 'StrapiResponse',
+            isExported: true,
+            typeParameters: ['T'],
+            properties: [
+                { name: 'data', type: 'T' },
+                {
+                    name: 'meta',
+                    type: '{ pagination?: { page: number; pageSize: number; pageCount: number; total: number } }',
+                    hasQuestionToken: true,
+                },
+            ],
+        })
 
-        lines.push('// Utility types for query parameters')
-        lines.push('')
-        lines.push('export interface StrapiResponse<T> {')
-        lines.push('  data: T')
-        lines.push('  meta?: {')
-        lines.push('    pagination?: {')
-        lines.push('      page: number')
-        lines.push('      pageSize: number')
-        lines.push('      pageCount: number')
-        lines.push('      total: number')
-        lines.push('    }')
-        lines.push('  }')
-        lines.push('}')
-        lines.push('')
-        lines.push('// Custom error class for Strapi API errors')
-        lines.push('export class StrapiError extends Error {')
-        lines.push('  /** Clean user-friendly message from Strapi backend */')
-        lines.push('  userMessage: string')
-        lines.push('  /** HTTP status code */')
-        lines.push('  status: number')
-        lines.push('  /** HTTP status text */')
-        lines.push('  statusText: string')
-        lines.push('  /** Additional error details from Strapi */')
-        lines.push('  details?: any')
-        lines.push('')
-        lines.push('  constructor(')
-        lines.push('    message: string,')
-        lines.push('    userMessage: string,')
-        lines.push('    status: number,')
-        lines.push('    statusText: string,')
-        lines.push('    details?: any')
-        lines.push('  ) {')
-        lines.push('    super(message)')
-        lines.push('    this.name = "StrapiError"')
-        lines.push('    this.userMessage = userMessage')
-        lines.push('    this.status = status')
-        lines.push('    this.statusText = statusText')
-        lines.push('    this.details = details')
-        lines.push('  }')
-        lines.push('}')
-        lines.push('')
-        lines.push('// Base API class with shared logic')
-        lines.push('class BaseAPI {')
-        lines.push('  constructor(protected config: StrapiClientConfig) {}')
-        lines.push('')
-        lines.push('  protected async request<R>(')
-        lines.push('    url: string,')
-        lines.push('    options: RequestInit = {},')
-        lines.push('    nextOptions?: NextOptions,')
-        lines.push("    errorPrefix = 'Strapi API'")
-        lines.push('  ): Promise<R> {')
-        lines.push('    const fetchFn = this.config.fetch || globalThis.fetch')
-        lines.push('')
-        lines.push('    if (this.config.debug) {')
-        lines.push(
-            "      console.log(`[${errorPrefix}] ${options.method || 'GET'} ${url}`)",
-        )
-        lines.push('    }')
-        lines.push('')
-        lines.push('    const headers: Record<string, string> = {')
-        lines.push('      ...options.headers as Record<string, string>,')
-        lines.push('    }')
-        lines.push('')
-        lines.push(
-            '    // Only add Content-Type for JSON, let browser set it for FormData',
-        )
-        lines.push('    if (!(options.body instanceof FormData)) {')
-        lines.push("      headers['Content-Type'] = 'application/json'")
-        lines.push('    }')
-        lines.push('')
-        lines.push('    if (this.config.token) {')
-        lines.push(
-            "      headers['Authorization'] = `Bearer ${this.config.token}`",
-        )
-        lines.push('    }')
-        lines.push('')
-        lines.push('    // Merge custom headers from nextOptions')
-        lines.push('    if (nextOptions?.headers) {')
-        lines.push(
-            '      for (const [key, value] of Object.entries(nextOptions.headers)) {',
-        )
-        lines.push('        if (value !== undefined) {')
-        lines.push('          headers[key] = value')
-        lines.push('        }')
-        lines.push('      }')
-        lines.push('    }')
-        lines.push('')
-        lines.push('    const fetchOptions: RequestInit = {')
-        lines.push('      ...options,')
-        lines.push('      headers,')
-        lines.push(
-            '      ...(this.config.credentials && { credentials: this.config.credentials }),',
-        )
-        lines.push('    }')
-        lines.push('')
-        lines.push('    // Add Next.js cache options if provided')
-        lines.push('    if (nextOptions) {')
-        lines.push(
-            '      if (nextOptions.revalidate !== undefined || nextOptions.tags) {',
-        )
-        lines.push('        fetchOptions.next = {')
-        lines.push(
-            '          ...(nextOptions.revalidate !== undefined && { revalidate: nextOptions.revalidate }),',
-        )
-        lines.push(
-            '          ...(nextOptions.tags && { tags: nextOptions.tags }),',
-        )
-        lines.push('        } as any')
-        lines.push('      }')
-        lines.push('      if (nextOptions.cache) {')
-        lines.push('        fetchOptions.cache = nextOptions.cache')
-        lines.push('      }')
-        lines.push('    }')
-        lines.push('')
-        lines.push('    const response = await fetchFn(url, fetchOptions)')
-        lines.push('')
-        lines.push('    if (!response.ok) {')
-        lines.push(
-            '      const errorData = await response.json().catch(() => ({}))',
-        )
-        lines.push(
-            '      const userMessage = errorData.error?.message || response.statusText',
-        )
-        lines.push(
-            "      const technicalMessage = `${errorPrefix} error: ${response.status} ${response.statusText}${errorData.error?.message ? ' - ' + errorData.error.message : ''}`",
-        )
-        lines.push('      throw new StrapiError(')
-        lines.push('        technicalMessage,')
-        lines.push('        userMessage,')
-        lines.push('        response.status,')
-        lines.push('        response.statusText,')
-        lines.push('        errorData.error?.details')
-        lines.push('      )')
-        lines.push('    }')
-        lines.push('')
-        lines.push(
-            '    // Handle 204 No Content (e.g., from DELETE operations)',
-        )
-        lines.push('    if (response.status === 204) {')
-        lines.push('      return null as R')
-        lines.push('    }')
-        lines.push('')
-        lines.push('    return response.json()')
-        lines.push('  }')
-        lines.push('')
-        lines.push(
-            '  protected buildQueryString(params?: QueryParams): string {',
-        )
-        lines.push("    if (!params) return ''")
-        lines.push('')
-        lines.push('    const queryString = qs.stringify(params, {')
-        lines.push('      encodeValuesOnly: true,')
-        lines.push('      skipNulls: true,')
-        lines.push('    })')
-        lines.push('')
-        lines.push("    return queryString ? `?${queryString}` : ''")
-        lines.push('  }')
-        lines.push('}')
-        lines.push('')
-        lines.push(
-            'type StrapiSortOption<T> = Exclude<keyof T & string, \'__typename\'> | `${Exclude<keyof T & string, \'__typename\'>}:${"asc" | "desc"}`',
-        )
-        lines.push('')
-        lines.push(
-            "export interface QueryParams<TEntity = any, TFilters = Record<string, any>, TPopulate = any, TFields extends string = Exclude<keyof TEntity & string, '__typename'>> {",
-        )
-        lines.push('  filters?: TFilters')
-        lines.push(
-            '  sort?: StrapiSortOption<TEntity> | StrapiSortOption<TEntity>[]',
-        )
-        lines.push('  pagination?: {')
-        lines.push('    page?: number')
-        lines.push('    pageSize?: number')
-        lines.push('    limit?: number')
-        lines.push('    start?: number')
-        lines.push('  }')
-        lines.push('  populate?: TPopulate')
-        lines.push('  fields?: TFields[]')
-        lines.push('}')
-        lines.push('')
-        lines.push('export interface NextOptions {')
-        lines.push('  revalidate?: number | false')
-        lines.push('  tags?: string[]')
-        lines.push('  cache?: RequestCache')
-        lines.push('  headers?: Record<string, string | undefined>')
-        lines.push('}')
-        lines.push('')
-        lines.push('export interface StrapiClientConfig {')
-        lines.push('  baseURL: string')
-        lines.push('  token?: string')
-        lines.push('  fetch?: typeof fetch')
-        lines.push('  debug?: boolean')
-        lines.push('  credentials?: RequestCredentials')
-        lines.push(
-            '  /** Enable schema validation on init (dev mode). Logs warning if types are outdated. */',
-        )
-        lines.push('  validateSchema?: boolean')
-        lines.push('}')
-        lines.push('')
-        lines.push('// Utility type for exact type equality check')
-        lines.push('type Equal<X, Y> =')
-        lines.push('  (<T>() => T extends X ? 1 : 2) extends')
-        lines.push('  (<T>() => T extends Y ? 1 : 2) ? true : false')
-        lines.push('')
-        lines.push(
-            '// Utility type to automatically infer populated type based on base type',
-        )
-        lines.push(
-            '// Uses exact equality instead of extends to avoid structural typing issues',
-        )
-        lines.push('type GetPopulated<TBase, TPopulate> =')
+        // StrapiError class
+        this.addStrapiErrorClass(sf)
 
-        // Generate conditional type for each content type with GetPayload
+        // BaseAPI class (complex — static block)
+        sf.addStatements(this.generateBaseAPIClass())
+
+        // StrapiSortOption type alias
+        sf.addTypeAlias({
+            name: 'StrapiSortOption',
+            typeParameters: ['T'],
+            type: `Exclude<keyof T & string, '__typename'> | \`\${Exclude<keyof T & string, '__typename'>}:\${"asc" | "desc"}\``,
+        })
+
+        // QueryParams interface
+        sf.addInterface({
+            name: 'QueryParams',
+            isExported: true,
+            typeParameters: [
+                'TEntity = any',
+                'TFilters = Record<string, any>',
+                'TPopulate = any',
+                `TFields extends string = Exclude<keyof TEntity & string, '__typename'>`,
+            ],
+            properties: [
+                {
+                    name: 'filters',
+                    type: 'TFilters',
+                    hasQuestionToken: true,
+                },
+                {
+                    name: 'sort',
+                    type: 'StrapiSortOption<TEntity> | StrapiSortOption<TEntity>[]',
+                    hasQuestionToken: true,
+                },
+                {
+                    name: 'pagination',
+                    type: '{ page?: number; pageSize?: number; limit?: number; start?: number }',
+                    hasQuestionToken: true,
+                },
+                {
+                    name: 'populate',
+                    type: 'TPopulate',
+                    hasQuestionToken: true,
+                },
+                {
+                    name: 'fields',
+                    type: 'TFields[]',
+                    hasQuestionToken: true,
+                },
+            ],
+        })
+
+        // NextOptions interface
+        sf.addInterface({
+            name: 'NextOptions',
+            isExported: true,
+            properties: [
+                {
+                    name: 'revalidate',
+                    type: 'number | false',
+                    hasQuestionToken: true,
+                },
+                {
+                    name: 'tags',
+                    type: 'string[]',
+                    hasQuestionToken: true,
+                },
+                {
+                    name: 'cache',
+                    type: 'RequestCache',
+                    hasQuestionToken: true,
+                },
+                {
+                    name: 'headers',
+                    type: 'Record<string, string | undefined>',
+                    hasQuestionToken: true,
+                },
+            ],
+        })
+
+        // StrapiClientConfig interface
+        sf.addInterface({
+            name: 'StrapiClientConfig',
+            isExported: true,
+            properties: [
+                { name: 'baseURL', type: 'string' },
+                {
+                    name: 'token',
+                    type: 'string',
+                    hasQuestionToken: true,
+                },
+                {
+                    name: 'fetch',
+                    type: 'typeof fetch',
+                    hasQuestionToken: true,
+                },
+                {
+                    name: 'debug',
+                    type: 'boolean',
+                    hasQuestionToken: true,
+                },
+                {
+                    name: 'credentials',
+                    type: 'RequestCredentials',
+                    hasQuestionToken: true,
+                },
+                {
+                    name: 'validateSchema',
+                    type: 'boolean',
+                    hasQuestionToken: true,
+                    docs: [
+                        'Enable schema validation on init (dev mode). Logs warning if types are outdated.',
+                    ],
+                },
+            ],
+        })
+
+        // Equal utility type
+        sf.addTypeAlias({
+            name: 'Equal',
+            docs: ['Utility type for exact type equality check'],
+            typeParameters: ['X', 'Y'],
+            type: `(<T>() => T extends X ? 1 : 2) extends (<T>() => T extends Y ? 1 : 2) ? true : false`,
+        })
+
+        // GetPopulated utility type (dynamic — depends on schema)
+        this.addGetPopulatedType(sf, schema)
+
+        // SelectFields utility type
+        sf.addTypeAlias({
+            name: 'SelectFields',
+            docs: [
+                'Utility type for narrowing return type based on fields parameter',
+            ],
+            typeParameters: ['TFull', 'TBase', 'TFields extends string'],
+            type: `[TFields] extends [never] ? TFull : Pick<TBase, Extract<TFields | 'id' | 'documentId', keyof TBase>> & Omit<TFull, keyof TBase>`,
+        })
+    }
+
+    private addStrapiErrorClass(sf: SourceFile): void {
+        sf.addClass({
+            name: 'StrapiError',
+            isExported: true,
+            docs: ['Custom error class for Strapi API errors'],
+            extends: 'Error',
+            properties: [
+                {
+                    name: 'userMessage',
+                    type: 'string',
+                    docs: ['Clean user-friendly message from Strapi backend'],
+                },
+                {
+                    name: 'status',
+                    type: 'number',
+                    docs: ['HTTP status code'],
+                },
+                {
+                    name: 'statusText',
+                    type: 'string',
+                    docs: ['HTTP status text'],
+                },
+                {
+                    name: 'details',
+                    type: 'any',
+                    hasQuestionToken: true,
+                    docs: ['Additional error details from Strapi'],
+                },
+            ],
+            ctors: [
+                {
+                    parameters: [
+                        { name: 'message', type: 'string' },
+                        { name: 'userMessage', type: 'string' },
+                        { name: 'status', type: 'number' },
+                        { name: 'statusText', type: 'string' },
+                        {
+                            name: 'details',
+                            type: 'any',
+                            hasQuestionToken: true,
+                        },
+                    ],
+                    statements: [
+                        'super(message)',
+                        'this.name = "StrapiError"',
+                        'this.userMessage = userMessage',
+                        'this.status = status',
+                        'this.statusText = statusText',
+                        'this.details = details',
+                    ],
+                },
+            ],
+        })
+    }
+
+    private generateBaseAPIClass(): string {
+        return `// Base API class with shared logic
+class BaseAPI {
+  constructor(protected config: StrapiClientConfig) {}
+
+  protected async request<R>(
+    url: string,
+    options: RequestInit = {},
+    nextOptions?: NextOptions,
+    errorPrefix = 'Strapi API'
+  ): Promise<R> {
+    const fetchFn = this.config.fetch || globalThis.fetch
+
+    if (this.config.debug) {
+      console.log(\`[\${errorPrefix}] \${options.method || 'GET'} \${url}\`)
+    }
+
+    const headers: Record<string, string> = {
+      ...options.headers as Record<string, string>,
+    }
+
+    // Only add Content-Type for JSON, let browser set it for FormData
+    if (!(options.body instanceof FormData)) {
+      headers['Content-Type'] = 'application/json'
+    }
+
+    if (this.config.token) {
+      headers['Authorization'] = \`Bearer \${this.config.token}\`
+    }
+
+    // Merge custom headers from nextOptions
+    if (nextOptions?.headers) {
+      for (const [key, value] of Object.entries(nextOptions.headers)) {
+        if (value !== undefined) {
+          headers[key] = value
+        }
+      }
+    }
+
+    const fetchOptions: RequestInit = {
+      ...options,
+      headers,
+      ...(this.config.credentials && { credentials: this.config.credentials }),
+    }
+
+    // Add Next.js cache options if provided
+    if (nextOptions) {
+      if (nextOptions.revalidate !== undefined || nextOptions.tags) {
+        fetchOptions.next = {
+          ...(nextOptions.revalidate !== undefined && { revalidate: nextOptions.revalidate }),
+          ...(nextOptions.tags && { tags: nextOptions.tags }),
+        } as any
+      }
+      if (nextOptions.cache) {
+        fetchOptions.cache = nextOptions.cache
+      }
+    }
+
+    const response = await fetchFn(url, fetchOptions)
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      const userMessage = errorData.error?.message || response.statusText
+      const technicalMessage = \`\${errorPrefix} error: \${response.status} \${response.statusText}\${errorData.error?.message ? ' - ' + errorData.error.message : ''}\`
+      throw new StrapiError(
+        technicalMessage,
+        userMessage,
+        response.status,
+        response.statusText,
+        errorData.error?.details
+      )
+    }
+
+    // Handle 204 No Content (e.g., from DELETE operations)
+    if (response.status === 204) {
+      return null as R
+    }
+
+    return response.json()
+  }
+
+  protected buildQueryString(params?: QueryParams): string {
+    if (!params) return ''
+
+    const queryString = qs.stringify(params, {
+      encodeValuesOnly: true,
+      skipNulls: true,
+    })
+
+    return queryString ? \`?\${queryString}\` : ''
+  }
+}`
+    }
+
+    private addGetPopulatedType(sf: SourceFile, schema: ParsedSchema): void {
         const typesWithPayload = schema.contentTypes.filter(
             ct =>
                 ct.relations.length > 0 ||
@@ -409,25 +493,23 @@ import qs from 'qs'`
                 ct.dynamicZones.length > 0,
         )
 
-        for (let i = 0; i < typesWithPayload.length; i++) {
-            const ct = typesWithPayload[i]
-
-            lines.push(
-                `  Equal<TBase, ${ct.cleanName}> extends true ? ${ct.cleanName}GetPayload<{ populate: TPopulate }> :`,
+        const conditionalBranches = typesWithPayload
+            .map(
+                ct =>
+                    `Equal<TBase, ${ct.cleanName}> extends true ? ${ct.cleanName}GetPayload<{ populate: TPopulate }> :`,
             )
-        }
+            .join('\n  ')
 
-        lines.push('  TBase')
-        lines.push('')
-        lines.push(
-            '// Utility type for narrowing return type based on fields parameter',
-        )
-        lines.push('type SelectFields<TFull, TBase, TFields extends string> =')
-        lines.push(
-            "  [TFields] extends [never] ? TFull : Pick<TBase, Extract<TFields | 'id' | 'documentId', keyof TBase>> & Omit<TFull, keyof TBase>",
-        )
-
-        return lines.join('\n')
+        sf.addTypeAlias({
+            name: 'GetPopulated',
+            docs: [
+                'Utility type to automatically infer populated type based on base type\nUses exact equality instead of extends to avoid structural typing issues',
+            ],
+            typeParameters: ['TBase', 'TPopulate'],
+            type: conditionalBranches
+                ? `${conditionalBranches}\n  TBase`
+                : 'TBase',
+        })
     }
 
     private generateCollectionAPI(): string {
@@ -649,9 +731,8 @@ class SingleTypeAPI<
         schema: ParsedSchema,
         parsedRoutes: ParsedRoutes,
     ): string {
-        const lines: string[] = []
+        const classes: string[] = []
 
-        // For each controller with custom routes, generate an extended API class
         for (const [controller, routes] of parsedRoutes.byController) {
             // Skip auth and user controllers - they are handled specially
             if (controller === 'auth' || controller === 'user') {
@@ -666,7 +747,6 @@ class SingleTypeAPI<
                         .replace(/s$/, '') === controller,
             )
 
-            // If content type exists (collection or single), extend the appropriate API class
             if (contentType) {
                 const className = `${contentType.cleanName}API`
                 const baseClass =
@@ -674,53 +754,42 @@ class SingleTypeAPI<
                         ? 'SingleTypeAPI'
                         : 'CollectionAPI'
                 const typeParams = this.buildTypeParams(contentType)
-
-                lines.push(
-                    `// Custom API class for ${contentType.cleanName} (${contentType.kind} type) with custom routes`,
-                )
-                lines.push(
-                    `class ${className} extends ${baseClass}${typeParams} {`,
-                )
-
-                // Generate custom methods (not standalone)
-                lines.push(
+                const customMethods =
                     this.customApiGenerator.generateCustomMethods(
                         controller,
                         routes,
                         false,
-                    ),
-                )
+                    )
 
-                lines.push('}')
-                lines.push('')
-            }
-            // If no content type found, create a standalone API class
-            else {
+                classes.push(
+                    `// Custom API class for ${contentType.cleanName} (${contentType.kind} type) with custom routes
+class ${className} extends ${baseClass}${typeParams} {
+${customMethods}
+}`,
+                )
+            } else {
+                // Standalone API class (no content type)
                 const className = toPascalCase(controller) + 'API'
-
-                lines.push(
-                    `// Standalone API class for ${controller} controller`,
-                )
-                lines.push(`class ${className} extends BaseAPI {`)
-                lines.push(`  constructor(config: StrapiClientConfig) {`)
-                lines.push(`    super(config)`)
-                lines.push(`  }`)
-
-                // Generate custom methods (standalone)
-                lines.push(
+                const customMethods =
                     this.customApiGenerator.generateCustomMethods(
                         controller,
                         routes,
                         true,
-                    ),
-                )
+                    )
 
-                lines.push('}')
-                lines.push('')
+                classes.push(
+                    `// Standalone API class for ${controller} controller
+class ${className} extends BaseAPI {
+  constructor(config: StrapiClientConfig) {
+    super(config)
+  }
+${customMethods}
+}`,
+                )
             }
         }
 
-        return lines.join('\n')
+        return classes.join('\n\n')
     }
 
     private buildTypeParams(contentType: ContentType): string {
@@ -740,219 +809,190 @@ class SingleTypeAPI<
         schema: ParsedSchema,
         parsedRoutes?: ParsedRoutes,
     ): string {
-        const lines: string[] = []
+        // Build property declarations
+        const propertyDeclarations = schema.contentTypes
+            .map(contentType => {
+                const endpoint = this.transformer.toEndpointName(
+                    contentType.cleanName,
+                    contentType.kind === 'single',
+                )
+                const controllerName = endpoint.replace(/s$/, '')
+                const hasCustomRoutes =
+                    parsedRoutes?.byController.has(controllerName) &&
+                    controllerName !== 'auth' &&
+                    controllerName !== 'user'
+                const apiClass = hasCustomRoutes
+                    ? `${contentType.cleanName}API`
+                    : contentType.kind === 'single'
+                      ? 'SingleTypeAPI'
+                      : 'CollectionAPI'
+                const propName = toCamelCase(endpoint)
+                const typeParam = hasCustomRoutes
+                    ? ''
+                    : this.buildTypeParams(contentType)
+                return `  ${propName}: ${apiClass}${typeParam}`
+            })
+            .join('\n')
 
-        lines.push('// Main Strapi client')
-        lines.push('export class StrapiClient {')
-        lines.push('  private config: StrapiClientConfig')
-        lines.push('')
-        lines.push('  // Auth API for users-permissions plugin')
-        lines.push('  authentication: AuthAPI')
-        lines.push('')
+        // Build standalone API property declarations
+        const standaloneDeclarations = this.buildStandaloneDeclarations(
+            schema,
+            parsedRoutes,
+        )
 
-        // Generate collection/single type properties
-        for (const contentType of schema.contentTypes) {
-            const endpoint = this.transformer.toEndpointName(
-                contentType.cleanName,
-                contentType.kind === 'single',
+        // Build constructor initializations
+        const propertyInits = schema.contentTypes
+            .map(contentType => {
+                const endpoint = this.transformer.toEndpointName(
+                    contentType.cleanName,
+                    contentType.kind === 'single',
+                )
+                const controllerName = endpoint.replace(/s$/, '')
+                const hasCustomRoutes =
+                    parsedRoutes?.byController.has(controllerName) &&
+                    controllerName !== 'auth' &&
+                    controllerName !== 'user'
+                const apiClass = hasCustomRoutes
+                    ? `${contentType.cleanName}API`
+                    : contentType.kind === 'single'
+                      ? 'SingleTypeAPI'
+                      : 'CollectionAPI'
+                const propName = toCamelCase(endpoint)
+                return `    this.${propName} = new ${apiClass}('${endpoint}', this.config)`
+            })
+            .join('\n')
+
+        // Build standalone API initializations
+        const standaloneInits = this.buildStandaloneInits(schema, parsedRoutes)
+
+        return `// Main Strapi client
+export class StrapiClient {
+  private config: StrapiClientConfig
+
+  // Auth API for users-permissions plugin
+  authentication: AuthAPI
+
+${propertyDeclarations}
+${standaloneDeclarations}
+  constructor(config: StrapiClientConfig) {
+    this.config = config
+
+    // Initialize Auth API
+    this.authentication = new AuthAPI(this.config)
+
+${propertyInits}
+${standaloneInits}
+    // Auto-validate schema in development mode
+    if (config.validateSchema) {
+      this.validateSchema().then(result => {
+        if (!result.valid && result.remoteHash) {
+          console.warn(\`[Strapi Types] Schema mismatch detected!\`)
+          console.warn(\`  Local:  \${result.localHash.slice(0, 8)}...\`)
+          console.warn(\`  Remote: \${result.remoteHash.slice(0, 8)}...\`)
+          console.warn('  Run "npx strapi-types generate" to update types.')
+        }
+      }).catch(() => {
+        // Silently ignore validation errors (e.g., plugin not installed)
+      })
+    }
+  }
+
+  setToken(token: string) {
+    this.config.token = token
+  }
+
+  /**
+   * Validate that local types match the remote Strapi schema.
+   * Useful for detecting schema drift in development.
+   * @returns Promise<{ valid: boolean; localHash: string; remoteHash?: string; error?: string }>
+   */
+  async validateSchema(): Promise<{
+    valid: boolean
+    localHash: string
+    remoteHash?: string
+    error?: string
+  }> {
+    try {
+      const { SCHEMA_HASH } = await import("./schema-meta.js")
+      const response = await fetch(\`\${this.config.baseURL}/api/strapi-types/schema-hash\`)
+      if (!response.ok) {
+        return {
+          valid: false,
+          localHash: SCHEMA_HASH,
+          error: \`Failed to fetch remote schema: \${response.status}\`
+        }
+      }
+      const { hash: remoteHash } = await response.json()
+      const valid = SCHEMA_HASH === remoteHash
+      if (!valid && this.config.debug) {
+        console.warn(\`[Strapi Types] Schema mismatch! Local: \${SCHEMA_HASH.slice(0, 8)}... Remote: \${remoteHash.slice(0, 8)}...\`)
+        console.warn('[Strapi Types] Run "npx strapi-types generate" to update types.')
+      }
+      return { valid, localHash: SCHEMA_HASH, remoteHash }
+    } catch (error) {
+      return {
+        valid: false,
+        localHash: 'unknown',
+        error: (error as Error).message
+      }
+    }
+  }
+}`
+    }
+
+    private buildStandaloneDeclarations(
+        schema: ParsedSchema,
+        parsedRoutes?: ParsedRoutes,
+    ): string {
+        if (!parsedRoutes) return ''
+
+        const declarations: string[] = []
+        for (const [controller] of parsedRoutes.byController) {
+            if (controller === 'auth' || controller === 'user') continue
+
+            const hasContentType = schema.contentTypes.some(
+                ct =>
+                    this.transformer
+                        .toEndpointName(ct.cleanName, false)
+                        .replace(/s$/, '') === controller,
             )
 
-            // Check if this content type has custom routes (excluding auth and user)
-            const controllerName = endpoint.replace(/s$/, '')
-            const hasCustomRoutes =
-                parsedRoutes?.byController.has(controllerName) &&
-                controllerName !== 'auth' &&
-                controllerName !== 'user'
-
-            // Determine API class name based on whether it has custom routes
-            const apiClass = hasCustomRoutes
-                ? `${contentType.cleanName}API`
-                : contentType.kind === 'single'
-                  ? 'SingleTypeAPI'
-                  : 'CollectionAPI'
-
-            const propName = toCamelCase(endpoint)
-
-            // Generate type parameters for standard API classes (not for custom route classes)
-            const typeParam = hasCustomRoutes
-                ? ''
-                : this.buildTypeParams(contentType)
-
-            lines.push(`  ${propName}: ${apiClass}${typeParam}`)
-        }
-
-        // Add standalone API properties (controllers without corresponding content types)
-        if (parsedRoutes) {
-            for (const [controller] of parsedRoutes.byController) {
-                // Skip auth and user controllers - they are handled specially
-                if (controller === 'auth' || controller === 'user') {
-                    continue
-                }
-
-                // Check if this controller has a corresponding content type
-                const hasContentType = schema.contentTypes.some(
-                    ct =>
-                        this.transformer
-                            .toEndpointName(ct.cleanName, false)
-                            .replace(/s$/, '') === controller,
-                )
-
-                // If no content type found, add standalone API property
-                if (!hasContentType) {
-                    const className = toPascalCase(controller) + 'API'
-                    const propName = toCamelCase(controller)
-
-                    lines.push(`  ${propName}: ${className}`)
-                }
+            if (!hasContentType) {
+                const className = toPascalCase(controller) + 'API'
+                const propName = toCamelCase(controller)
+                declarations.push(`  ${propName}: ${className}`)
             }
         }
 
-        lines.push('')
-        lines.push('  constructor(config: StrapiClientConfig) {')
-        lines.push('    this.config = config')
-        lines.push('')
-        lines.push('    // Initialize Auth API')
-        lines.push('    this.authentication = new AuthAPI(this.config)')
-        lines.push('')
+        return declarations.join('\n')
+    }
 
-        // Initialize collection/single type properties
-        for (const contentType of schema.contentTypes) {
-            const endpoint = this.transformer.toEndpointName(
-                contentType.cleanName,
-                contentType.kind === 'single',
+    private buildStandaloneInits(
+        schema: ParsedSchema,
+        parsedRoutes?: ParsedRoutes,
+    ): string {
+        if (!parsedRoutes) return ''
+
+        const inits: string[] = []
+        for (const [controller] of parsedRoutes.byController) {
+            if (controller === 'auth' || controller === 'user') continue
+
+            const hasContentType = schema.contentTypes.some(
+                ct =>
+                    this.transformer
+                        .toEndpointName(ct.cleanName, false)
+                        .replace(/s$/, '') === controller,
             )
 
-            // Check if this content type has custom routes (excluding auth and user)
-            const controllerName = endpoint.replace(/s$/, '')
-            const hasCustomRoutes =
-                parsedRoutes?.byController.has(controllerName) &&
-                controllerName !== 'auth' &&
-                controllerName !== 'user'
-
-            // Determine API class name based on whether it has custom routes
-            const apiClass = hasCustomRoutes
-                ? `${contentType.cleanName}API`
-                : contentType.kind === 'single'
-                  ? 'SingleTypeAPI'
-                  : 'CollectionAPI'
-
-            const propName = toCamelCase(endpoint)
-
-            lines.push(
-                `    this.${propName} = new ${apiClass}('${endpoint}', this.config)`,
-            )
-        }
-
-        // Initialize standalone API properties
-        if (parsedRoutes) {
-            for (const [controller] of parsedRoutes.byController) {
-                // Skip auth and user controllers - they are handled specially
-                if (controller === 'auth' || controller === 'user') {
-                    continue
-                }
-
-                // Check if this controller has a corresponding content type
-                const hasContentType = schema.contentTypes.some(
-                    ct =>
-                        this.transformer
-                            .toEndpointName(ct.cleanName, false)
-                            .replace(/s$/, '') === controller,
+            if (!hasContentType) {
+                const className = toPascalCase(controller) + 'API'
+                const propName = toCamelCase(controller)
+                inits.push(
+                    `    this.${propName} = new ${className}(this.config)`,
                 )
-
-                // If no content type found, initialize standalone API
-                if (!hasContentType) {
-                    const className = toPascalCase(controller) + 'API'
-                    const propName = toCamelCase(controller)
-
-                    lines.push(
-                        `    this.${propName} = new ${className}(this.config)`,
-                    )
-                }
             }
         }
 
-        lines.push('')
-        lines.push('    // Auto-validate schema in development mode')
-        lines.push('    if (config.validateSchema) {')
-        lines.push('      this.validateSchema().then(result => {')
-        lines.push('        if (!result.valid && result.remoteHash) {')
-        lines.push(
-            '          console.warn(`[Strapi Types] Schema mismatch detected!`)',
-        )
-        lines.push(
-            '          console.warn(`  Local:  ${result.localHash.slice(0, 8)}...`)',
-        )
-        lines.push(
-            '          console.warn(`  Remote: ${result.remoteHash.slice(0, 8)}...`)',
-        )
-        lines.push(
-            '          console.warn(\'  Run "npx strapi-types generate" to update types.\')',
-        )
-        lines.push('        }')
-        lines.push('      }).catch(() => {')
-        lines.push(
-            '        // Silently ignore validation errors (e.g., plugin not installed)',
-        )
-        lines.push('      })')
-        lines.push('    }')
-        lines.push('  }')
-        lines.push('')
-        lines.push('  setToken(token: string) {')
-        lines.push('    this.config.token = token')
-        lines.push('  }')
-        lines.push('')
-        lines.push('  /**')
-        lines.push(
-            '   * Validate that local types match the remote Strapi schema.',
-        )
-        lines.push('   * Useful for detecting schema drift in development.')
-        lines.push(
-            '   * @returns Promise<{ valid: boolean; localHash: string; remoteHash?: string; error?: string }>',
-        )
-        lines.push('   */')
-        lines.push('  async validateSchema(): Promise<{')
-        lines.push('    valid: boolean')
-        lines.push('    localHash: string')
-        lines.push('    remoteHash?: string')
-        lines.push('    error?: string')
-        lines.push('  }> {')
-        lines.push('    try {')
-        lines.push(
-            '      const { SCHEMA_HASH } = await import("./schema-meta.js")',
-        )
-        lines.push(
-            '      const response = await fetch(`${this.config.baseURL}/api/strapi-types/schema-hash`)',
-        )
-        lines.push('      if (!response.ok) {')
-        lines.push('        return {')
-        lines.push('          valid: false,')
-        lines.push('          localHash: SCHEMA_HASH,')
-        lines.push(
-            '          error: `Failed to fetch remote schema: ${response.status}`',
-        )
-        lines.push('        }')
-        lines.push('      }')
-        lines.push('      const { hash: remoteHash } = await response.json()')
-        lines.push('      const valid = SCHEMA_HASH === remoteHash')
-        lines.push('      if (!valid && this.config.debug) {')
-        lines.push(
-            '        console.warn(`[Strapi Types] Schema mismatch! Local: ${SCHEMA_HASH.slice(0, 8)}... Remote: ${remoteHash.slice(0, 8)}...`)',
-        )
-        lines.push(
-            '        console.warn(\'[Strapi Types] Run "npx strapi-types generate" to update types.\')',
-        )
-        lines.push('      }')
-        lines.push('      return { valid, localHash: SCHEMA_HASH, remoteHash }')
-        lines.push('    } catch (error) {')
-        lines.push('      return {')
-        lines.push('        valid: false,')
-        lines.push("        localHash: 'unknown',")
-        lines.push('        error: (error as Error).message')
-        lines.push('      }')
-        lines.push('    }')
-        lines.push('  }')
-        lines.push('}')
-
-        return lines.join('\n')
+        return inits.join('\n')
     }
 }
