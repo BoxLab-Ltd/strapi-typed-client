@@ -2,6 +2,7 @@
  * Generate command - generates TypeScript types from Strapi schema
  */
 
+import * as fs from 'fs'
 import * as path from 'path'
 import { createApiClient } from '../utils/api-client.js'
 import {
@@ -52,7 +53,16 @@ export async function generate(
         // Check if we need to regenerate (compare hashes)
         if (!options.force) {
             const localHash = readLocalSchemaHash(outputDir)
-            if (localHash) {
+
+            // Verify generated files actually exist (they may be lost after package update)
+            const generatedFiles = [
+                'types.d.ts',
+                'client.d.ts',
+                'index.d.ts',
+            ].map(f => path.join(outputDir, f))
+            const allFilesExist = generatedFiles.every(f => fs.existsSync(f))
+
+            if (localHash && allFilesExist) {
                 if (!options.silent) {
                     console.log('Checking schema hash...')
                 }
@@ -86,6 +96,12 @@ export async function generate(
                             'Could not check remote hash, regenerating...',
                         )
                     }
+                }
+            } else if (localHash && !allFilesExist) {
+                if (!options.silent) {
+                    console.log(
+                        'Generated files missing (package may have been updated), regenerating...',
+                    )
                 }
             }
         }
