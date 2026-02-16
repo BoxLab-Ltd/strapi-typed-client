@@ -87,6 +87,13 @@ function loading(silent: boolean, msg: string): () => void {
     }
 }
 
+function generatedFilesExist(): boolean {
+    const outputDir = getOutputDir()
+    return ['types.d.ts', 'client.d.ts', 'index.d.ts'].every(f =>
+        fs.existsSync(path.join(outputDir, f)),
+    )
+}
+
 async function startDevWatch(config: StrapiTypesConfig): Promise<void> {
     const outputDir = getOutputDir()
     const interval = config.watchInterval ?? 5000
@@ -100,7 +107,8 @@ async function startDevWatch(config: StrapiTypesConfig): Promise<void> {
 
     const client = createApiClient({ url, token })
 
-    let lastHash = readCachedHash()
+    // If generated files are missing (e.g. after package upgrade), ignore cached hash
+    let lastHash = generatedFilesExist() ? readCachedHash() : null
 
     info(
         silent,
@@ -111,7 +119,8 @@ async function startDevWatch(config: StrapiTypesConfig): Promise<void> {
         try {
             const { hash: remoteHash } = await client.getSchemaHash()
 
-            if (lastHash !== remoteHash) {
+            // Also regenerate when files are missing (e.g. after yarn install mid-session)
+            if (lastHash !== remoteHash || !generatedFilesExist()) {
                 const stop = loading(silent, 'Regenerating types')
 
                 const start = Date.now()

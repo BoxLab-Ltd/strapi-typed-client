@@ -33,3 +33,4 @@ docs/.vitepress/cache
 # Claude Code
 CLAUDE.md
 .claude
+logo/
