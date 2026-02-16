@@ -127,12 +127,42 @@ describe('ClientGenerator', () => {
             expect(output).toContain('statusText: string')
             expect(output).toContain('details?: any')
         })
+        it('should generate StrapiConnectionError class', () => {
+            expect(output).toContain(
+                'export class StrapiConnectionError extends Error',
+            )
+            expect(output).toContain('url: string')
+            expect(output).toContain('cause?: Error')
+        })
         it('should generate BaseAPI class with request and buildQueryString methods', () => {
             expect(output).toContain('class BaseAPI')
             expect(output).toContain('protected async request<R>(')
             expect(output).toContain(
                 'protected buildQueryString(params?: QueryParams): string',
             )
+        })
+        it('should wrap fetch in try-catch with StrapiConnectionError for network errors', () => {
+            expect(output).toContain('throw new StrapiConnectionError(')
+            expect(output).toContain('ECONNREFUSED')
+            expect(output).toContain('Is the server running?')
+            expect(output).toContain('ENOTFOUND')
+            expect(output).toContain('Could not resolve host')
+        })
+        it('should detect HTML responses and throw StrapiError with helpful message', () => {
+            expect(output).toContain('text/html')
+            expect(output).toContain('Strapi returned HTML instead of JSON')
+        })
+        it('should include HTTP status hints for common error codes', () => {
+            expect(output).toContain('getErrorHint')
+            expect(output).toContain('check that your API token is valid')
+            expect(output).toContain('your token may lack permissions')
+            expect(output).toContain('this endpoint may not exist')
+            expect(output).toContain('internal Strapi error')
+        })
+        it('should support timeout via AbortController', () => {
+            expect(output).toContain('AbortController')
+            expect(output).toContain('Request timed out after')
+            expect(output).toContain('this.config.timeout')
         })
         it('should generate StrapiSortOption type excluding __typename', () => {
             expect(output).toContain(
@@ -160,6 +190,9 @@ describe('ClientGenerator', () => {
             expect(output).toContain('fetch?: typeof fetch')
             expect(output).toContain('debug?: boolean')
             expect(output).toContain('credentials?: RequestCredentials')
+        })
+        it('should generate timeout option in StrapiClientConfig', () => {
+            expect(output).toContain('timeout?: number')
         })
         it('should generate Equal utility type', () => {
             expect(output).toContain('type Equal<X, Y> =')

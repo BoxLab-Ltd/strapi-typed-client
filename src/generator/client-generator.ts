@@ -199,6 +199,9 @@ import qs from 'qs'`
         // StrapiError class
         this.addStrapiErrorClass(sf)
 
+        // StrapiConnectionError class
+        this.addStrapiConnectionErrorClass(sf)
+
         // BaseAPI class (complex — static block)
         sf.addStatements(this.generateBaseAPIClass())
 
@@ -303,6 +306,14 @@ import qs from 'qs'`
                     hasQuestionToken: true,
                 },
                 {
+                    name: 'timeout',
+                    type: 'number',
+                    hasQuestionToken: true,
+                    docs: [
+                        'Request timeout in milliseconds. When set, requests that take longer will be aborted.',
+                    ],
+                },
+                {
                     name: 'validateSchema',
                     type: 'boolean',
                     hasQuestionToken: true,
@@ -390,10 +401,65 @@ import qs from 'qs'`
         })
     }
 
+    private addStrapiConnectionErrorClass(sf: SourceFile): void {
+        sf.addClass({
+            name: 'StrapiConnectionError',
+            isExported: true,
+            docs: [
+                'Error thrown when the client cannot connect to Strapi (network failures, DNS, timeouts)',
+            ],
+            extends: 'Error',
+            properties: [
+                {
+                    name: 'url',
+                    type: 'string',
+                    docs: ['The URL that was being requested'],
+                },
+                {
+                    name: 'cause',
+                    type: 'Error',
+                    hasQuestionToken: true,
+                    docs: [
+                        'The original error that caused the connection failure',
+                    ],
+                },
+            ],
+            ctors: [
+                {
+                    parameters: [
+                        { name: 'message', type: 'string' },
+                        { name: 'url', type: 'string' },
+                        {
+                            name: 'cause',
+                            type: 'Error',
+                            hasQuestionToken: true,
+                        },
+                    ],
+                    statements: [
+                        'super(message)',
+                        'this.name = "StrapiConnectionError"',
+                        'this.url = url',
+                        'this.cause = cause',
+                    ],
+                },
+            ],
+        })
+    }
+
     private generateBaseAPIClass(): string {
         return `// Base API class with shared logic
 class BaseAPI {
   constructor(protected config: StrapiClientConfig) {}
+
+  private getErrorHint(status: number): string {
+    switch (status) {
+      case 401: return ' Hint: check that your API token is valid and passed to StrapiClient config.'
+      case 403: return ' Hint: your token may lack permissions for this endpoint. Check Strapi roles & permissions.'
+      case 404: return ' Hint: this endpoint may not exist. Verify the content type is created in Strapi and the API is enabled.'
+      case 500: return ' Hint: internal Strapi error. Check Strapi server logs for details.'
+      default: return ''
+    }
+  }
 
   protected async request<R>(
     url: string,
@@ -448,12 +514,76 @@ class BaseAPI {
       }
     }
 
-    const response = await fetchFn(url, fetchOptions)
+    // Timeout support via AbortController
+    let timeoutId: ReturnType<typeof setTimeout> | undefined
+    if (this.config.timeout) {
+      const controller = new AbortController()
+      fetchOptions.signal = controller.signal
+      timeoutId = setTimeout(() => controller.abort(), this.config.timeout)
+    }
+
+    let response: Response
+    try {
+      response = await fetchFn(url, fetchOptions)
+    } catch (error: any) {
+      if (timeoutId) clearTimeout(timeoutId)
+
+      const baseURL = this.config.baseURL
+      const msg = error?.message || String(error)
+
+      // Timeout (AbortController abort)
+      if (error?.name === 'AbortError') {
+        throw new StrapiConnectionError(
+          \`Request timed out after \${this.config.timeout}ms. URL: \${url}\`,
+          url,
+          error
+        )
+      }
+
+      // Connection refused
+      if (msg.includes('ECONNREFUSED')) {
+        throw new StrapiConnectionError(
+          \`Could not connect to Strapi at \${baseURL}. Is the server running?\`,
+          url,
+          error
+        )
+      }
+
+      // DNS resolution failure
+      if (msg.includes('ENOTFOUND') || msg.includes('getaddrinfo')) {
+        throw new StrapiConnectionError(
+          \`Could not resolve host. Check your baseURL: \${baseURL}\`,
+          url,
+          error
+        )
+      }
+
+      // Generic network error
+      throw new StrapiConnectionError(
+        \`Network error: \${msg}. Check your baseURL: \${baseURL}\`,
+        url,
+        error
+      )
+    } finally {
+      if (timeoutId) clearTimeout(timeoutId)
+    }
 
     if (!response.ok) {
+      // Detect HTML response (wrong server / reverse proxy error page)
+      const contentType = response.headers.get('content-type') || ''
+      if (contentType.includes('text/html')) {
+        throw new StrapiError(
+          \`Strapi returned HTML instead of JSON. Your baseURL may point to the wrong server. URL: \${url}\`,
+          'Unexpected HTML response from server',
+          response.status,
+          response.statusText
+        )
+      }
+
       const errorData = await response.json().catch(() => ({}))
       const userMessage = errorData.error?.message || response.statusText
-      const technicalMessage = \`\${errorPrefix} error: \${response.status} \${response.statusText}\${errorData.error?.message ? ' - ' + errorData.error.message : ''}\`
+      const hint = this.getErrorHint(response.status)
+      const technicalMessage = \`\${errorPrefix} error: \${response.status} \${response.statusText}\${errorData.error?.message ? ' - ' + errorData.error.message : ''}\${hint}\`
       throw new StrapiError(
         technicalMessage,
         userMessage,

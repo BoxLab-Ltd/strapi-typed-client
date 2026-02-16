@@ -180,19 +180,45 @@ The token is sent as a `Bearer` token in the `Authorization` header on every req
 
 ## Error Handling
 
-The client throws errors when the HTTP response indicates a failure. Wrap your calls in try/catch to handle them:
+The client throws two types of errors:
+
+- **`StrapiError`** — the server responded with a non-OK HTTP status (400, 401, 404, 500, etc.)
+- **`StrapiConnectionError`** — the request never reached the server (network down, DNS failure, timeout)
 
 ```ts
+import { StrapiError, StrapiConnectionError } from 'strapi-typed-client'
+
 try {
     const result = await strapi.articles.findOne('nonexistent-id')
 } catch (error) {
-    if (error instanceof Error) {
-        console.error('Request failed:', error.message)
+    if (error instanceof StrapiConnectionError) {
+        // Network-level failure — server unreachable, DNS error, timeout
+        console.error('Cannot reach Strapi:', error.message)
+    } else if (error instanceof StrapiError) {
+        // Server responded with an error
+        console.error(`HTTP ${error.status}:`, error.userMessage)
     }
 }
 ```
 
-A common pattern is to create a helper that standardizes error handling across your application:
+Error messages include contextual hints for common HTTP codes (401, 403, 404, 500), so even raw `error.message` is informative.
+
+### Request Timeout
+
+Set the `timeout` option (in milliseconds) to abort requests that take too long:
+
+```ts
+const strapi = new StrapiClient({
+    baseURL: 'http://localhost:1337',
+    timeout: 5000, // 5 seconds
+})
+```
+
+When a request exceeds the timeout, a `StrapiConnectionError` is thrown with the message `Request timed out after 5000ms`.
+
+### Common Pattern
+
+A helper that standardizes error handling across your application:
 
 ```ts
 async function safeFind<T>(fn: () => Promise<T>): Promise<T | null> {

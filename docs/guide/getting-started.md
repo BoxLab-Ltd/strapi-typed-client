@@ -135,6 +135,10 @@ console.log(articles.data) // Article[]
 The client uses the global `fetch` by default. In Next.js, this means you automatically get all of Next.js's fetch optimizations (caching, deduplication, revalidation). See the [Next.js integration guide](/guide/nextjs) for details.
 :::
 
+::: tip What if I skip the generate step?
+The package ships with a stub that lets `import { StrapiClient } from 'strapi-typed-client'` resolve without errors. However, creating a `StrapiClient` instance will throw a clear error reminding you to run `npx strapi-types generate`.
+:::
+
 ## Next Steps
 
 - [CLI Commands Reference](/guide/cli) — all CLI options and environment variables

@@ -21,6 +21,7 @@ const strapi = new StrapiClient(config: StrapiClientConfig)
 | `fetch`          | `typeof fetch`       | No       | Custom fetch function (defaults to `globalThis.fetch`)        |
 | `debug`          | `boolean`            | No       | Log all requests to console                                   |
 | `credentials`    | `RequestCredentials` | No       | Credentials mode for fetch (`include`, `same-origin`, `omit`) |
+| `timeout`        | `number`             | No       | Request timeout in milliseconds. Aborts request if exceeded   |
 | `validateSchema` | `boolean`            | No       | Check schema hash on init and warn if types are outdated      |
 
 ```ts
@@ -557,8 +558,17 @@ class StrapiError extends Error {
 }
 ```
 
+The error message includes a contextual hint for common HTTP status codes:
+
+| Status | Hint                                                                                 |
+| ------ | ------------------------------------------------------------------------------------ |
+| 401    | Check that your API token is valid and passed to StrapiClient config.                |
+| 403    | Your token may lack permissions for this endpoint. Check Strapi roles & permissions. |
+| 404    | This endpoint may not exist. Verify the content type is created in Strapi.           |
+| 500    | Internal Strapi error. Check Strapi server logs for details.                         |
+
 ```ts
-import { StrapiError } from './dist'
+import { StrapiError } from 'strapi-typed-client'
 
 try {
     await strapi.articles.create({ title: '' })
@@ -567,6 +577,42 @@ try {
         console.log(error.status) // 400
         console.log(error.userMessage) // "title must be at least 1 character"
         console.log(error.details) // validation details from Strapi
+    }
+}
+```
+
+## StrapiConnectionError
+
+Error thrown when the client cannot reach the Strapi server at all (network failures, DNS errors, timeouts).
+
+```ts
+class StrapiConnectionError extends Error {
+    /** The URL that was being requested */
+    url: string
+    /** The original error that caused the connection failure */
+    cause?: Error
+}
+```
+
+The error message is specific to the failure type:
+
+| Cause                | Message                                                            |
+| -------------------- | ------------------------------------------------------------------ |
+| Server not running   | `Could not connect to Strapi at {baseURL}. Is the server running?` |
+| DNS resolution error | `Could not resolve host. Check your baseURL: {baseURL}`            |
+| Request timeout      | `Request timed out after {timeout}ms. URL: {url}`                  |
+| Other network error  | `Network error: {message}. Check your baseURL: {baseURL}`          |
+
+```ts
+import { StrapiConnectionError } from 'strapi-typed-client'
+
+try {
+    await strapi.articles.find()
+} catch (error) {
+    if (error instanceof StrapiConnectionError) {
+        console.log(error.message) // "Could not connect to Strapi at http://localhost:1337. Is the server running?"
+        console.log(error.url) // the full request URL
+        console.log(error.cause) // original fetch error
     }
 }
 ```
