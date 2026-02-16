@@ -30,29 +30,26 @@ function getOutputDir(): string {
     return path.join(getPackageDir(), 'dist')
 }
 
-function getCacheDir(): string {
-    const packageDir = getPackageDir()
-    const nodeModules = path.dirname(path.dirname(packageDir))
-    return path.join(nodeModules, '.cache', 'strapi-types')
-}
-
-function readCachedHash(): string | null {
+/**
+ * Read schema hash from schema-meta.ts written by the generate command.
+ * Single source of truth — no separate cache file.
+ */
+function readLocalHash(): string | null {
     try {
-        const hashFile = path.join(getCacheDir(), 'schema-hash')
-        return fs.readFileSync(hashFile, 'utf-8').trim()
+        const metaPath = path.join(getOutputDir(), 'schema-meta.ts')
+        const content = fs.readFileSync(metaPath, 'utf-8')
+        const match = content.match(/SCHEMA_HASH\s*=\s*['"]([^'"]+)['"]/)
+        return match ? match[1] : null
     } catch {
         return null
     }
 }
 
-function writeCachedHash(hash: string): void {
-    try {
-        const cacheDir = getCacheDir()
-        fs.mkdirSync(cacheDir, { recursive: true })
-        fs.writeFileSync(path.join(cacheDir, 'schema-hash'), hash, 'utf-8')
-    } catch {
-        // Non-critical
-    }
+function generatedFilesExist(): boolean {
+    const outputDir = getOutputDir()
+    return ['types.d.ts', 'client.d.ts', 'index.d.ts'].every(f =>
+        fs.existsSync(path.join(outputDir, f)),
+    )
 }
 
 // ANSI colors matching Next.js output
@@ -87,13 +84,6 @@ function loading(silent: boolean, msg: string): () => void {
     }
 }
 
-function generatedFilesExist(): boolean {
-    const outputDir = getOutputDir()
-    return ['types.d.ts', 'client.d.ts', 'index.d.ts'].every(f =>
-        fs.existsSync(path.join(outputDir, f)),
-    )
-}
-
 async function startDevWatch(config: StrapiTypesConfig): Promise<void> {
     const outputDir = getOutputDir()
     const interval = config.watchInterval ?? 5000
@@ -107,8 +97,7 @@ async function startDevWatch(config: StrapiTypesConfig): Promise<void> {
 
     const client = createApiClient({ url, token })
 
-    // If generated files are missing (e.g. after package upgrade), ignore cached hash
-    let lastHash = generatedFilesExist() ? readCachedHash() : null
+    let lastHash = generatedFilesExist() ? readLocalHash() : null
 
     info(
         silent,
@@ -119,7 +108,6 @@ async function startDevWatch(config: StrapiTypesConfig): Promise<void> {
         try {
             const { hash: remoteHash } = await client.getSchemaHash()
 
-            // Also regenerate when files are missing (e.g. after yarn install mid-session)
             if (lastHash !== remoteHash || !generatedFilesExist()) {
                 const stop = loading(silent, 'Regenerating types')
 
@@ -140,7 +128,6 @@ async function startDevWatch(config: StrapiTypesConfig): Promise<void> {
                         `Types regenerated in ${dim(`${Date.now() - start}ms`)}`,
                     )
                     lastHash = remoteHash
-                    writeCachedHash(remoteHash)
                 } else {
                     fail(`Failed to regenerate: ${result.error}`)
                 }
@@ -203,9 +190,10 @@ function runBuildGenerate(config: StrapiTypesConfig): void {
 /**
  * Acquire a PID-based file lock so only one process runs the polling loop.
  * Next.js dev spawns multiple worker processes — each would start its own watcher.
+ * Lock lives inside the package dir so it's cleaned up on reinstall.
  */
 function acquireWatchLock(): boolean {
-    const lockFile = path.join(getCacheDir(), 'watch.lock')
+    const lockFile = path.join(getPackageDir(), 'watch.lock')
     try {
         // Check existing lock
         const existing = fs.readFileSync(lockFile, 'utf-8').trim()
@@ -222,7 +210,6 @@ function acquireWatchLock(): boolean {
         // no lock file
     }
     try {
-        fs.mkdirSync(getCacheDir(), { recursive: true })
         fs.writeFileSync(lockFile, String(process.pid), 'utf-8')
         return true
     } catch {
@@ -232,7 +219,7 @@ function acquireWatchLock(): boolean {
 
 function releaseWatchLock(): void {
     try {
-        const lockFile = path.join(getCacheDir(), 'watch.lock')
+        const lockFile = path.join(getPackageDir(), 'watch.lock')
         const existing = fs.readFileSync(lockFile, 'utf-8').trim()
         if (Number(existing) === process.pid) {
             fs.unlinkSync(lockFile)
