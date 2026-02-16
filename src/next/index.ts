@@ -15,7 +15,6 @@ import * as path from 'path'
 export interface StrapiTypesConfig {
     strapiUrl?: string
     token?: string
-    watchInterval?: number
     silent?: boolean
 }
 
@@ -86,7 +85,6 @@ function loading(silent: boolean, msg: string): () => void {
 
 async function startDevWatch(config: StrapiTypesConfig): Promise<void> {
     const outputDir = getOutputDir()
-    const interval = config.watchInterval ?? 5000
     const silent = config.silent ?? false
     const url =
         config.strapiUrl || process.env.STRAPI_URL || 'http://localhost:1337'
@@ -94,57 +92,60 @@ async function startDevWatch(config: StrapiTypesConfig): Promise<void> {
 
     const { createApiClient } = await import('../cli/utils/api-client.js')
     const { generate } = await import('../cli/commands/generate.js')
+    const { SseConnection } = await import('../shared/sse-client.js')
 
     const client = createApiClient({ url, token })
 
     let lastHash = generatedFilesExist() ? readLocalHash() : null
+    let generating = false
 
-    info(
-        silent,
-        `Watching for schema changes ${dim(`(every ${interval / 1000}s)`)}`,
-    )
+    info(silent, `Watching for schema changes ${dim('(SSE)')}`)
 
-    const poll = async () => {
-        try {
-            const { hash: remoteHash } = await client.getSchemaHash()
+    const sse = new SseConnection({
+        url: client.sseUrl,
+        headers: client.getHeaders(),
+        async onEvent({ event, data }) {
+            if (event !== 'connected' || generating) return
 
-            if (lastHash !== remoteHash || !generatedFilesExist()) {
-                const stop = loading(silent, 'Regenerating types')
+            try {
+                const { hash: remoteHash } = JSON.parse(data)
 
-                const start = Date.now()
-                const result = await generate({
-                    url,
-                    token,
-                    output: outputDir,
-                    silent: true,
-                    force: true,
-                })
+                if (lastHash !== remoteHash || !generatedFilesExist()) {
+                    generating = true
+                    const stop = loading(silent, 'Regenerating types')
 
-                stop()
+                    const start = Date.now()
+                    const result = await generate({
+                        url,
+                        token,
+                        output: outputDir,
+                        silent: true,
+                        force: true,
+                    })
 
-                if (result.success) {
-                    ok(
-                        silent,
-                        `Types regenerated in ${dim(`${Date.now() - start}ms`)}`,
-                    )
-                    lastHash = remoteHash
-                } else {
-                    fail(`Failed to regenerate: ${result.error}`)
+                    stop()
+
+                    if (result.success) {
+                        ok(
+                            silent,
+                            `Types regenerated in ${dim(`${Date.now() - start}ms`)}`,
+                        )
+                        lastHash = remoteHash
+                    } else {
+                        fail(`Failed to regenerate: ${result.error}`)
+                    }
+                    generating = false
                 }
+            } catch {
+                generating = false
             }
-        } catch {
-            // Strapi not available yet
-        }
-    }
+        },
+    })
 
-    await poll()
-
-    const intervalId = setInterval(poll, interval)
-    // unref() prevents the timer from keeping detached/worker processes alive
-    intervalId.unref()
+    sse.connect()
 
     const cleanup = () => {
-        clearInterval(intervalId)
+        sse.close()
         releaseWatchLock()
     }
     process.on('SIGINT', cleanup)
@@ -188,7 +189,7 @@ function runBuildGenerate(config: StrapiTypesConfig): void {
 }
 
 /**
- * Acquire a PID-based file lock so only one process runs the polling loop.
+ * Acquire a PID-based file lock so only one process runs the watcher.
  * Next.js dev spawns multiple worker processes — each would start its own watcher.
  * Lock lives inside the package dir so it's cleaned up on reinstall.
  */
@@ -244,7 +245,7 @@ export function withStrapiTypes(config?: StrapiTypesConfig) {
         const cfg = config ?? {}
 
         if (process.env.NODE_ENV === 'development' && isMainNextProcess()) {
-            // next dev — polling loop (only one process via PID lock)
+            // next dev — SSE watcher (only one process via PID lock)
             if (acquireWatchLock()) {
                 startDevWatch(cfg)
             }

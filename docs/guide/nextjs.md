@@ -4,7 +4,7 @@
 
 ## withStrapiTypes Wrapper
 
-Wrap your Next.js config with `withStrapiTypes` to enable automatic schema polling and type generation:
+Wrap your Next.js config with `withStrapiTypes` to enable automatic schema watching and type generation:
 
 ```ts
 // next.config.ts
@@ -23,10 +23,10 @@ export default withStrapiTypes(nextConfig, {
 
 ### Behavior
 
-| Mode         | What Happens                                                                            |
-| ------------ | --------------------------------------------------------------------------------------- |
-| `next dev`   | Polls the Strapi schema every 5 seconds and regenerates types when changes are detected |
-| `next build` | Runs a one-time generation before the build starts                                      |
+| Mode         | What Happens                                                                   |
+| ------------ | ------------------------------------------------------------------------------ |
+| `next dev`   | Connects to Strapi via SSE and regenerates types instantly when schema changes |
+| `next build` | Runs a one-time generation before the build starts                             |
 
 ::: tip
 This replaces the need to run `strapi-types watch` or `strapi-types generate` manually. The wrapper handles everything.

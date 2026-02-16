@@ -1,5 +1,5 @@
 /**
- * Watch command - polls for schema changes and regenerates types
+ * Watch command - connects to SSE stream and regenerates types on schema changes
  */
 
 import { createApiClient } from '../utils/api-client.js'
@@ -7,22 +7,21 @@ import {
     readLocalSchemaHash,
     getDefaultOutputDir,
 } from '../utils/file-writer.js'
+import { SseConnection } from '../../shared/sse-client.js'
 import { generate } from './generate.js'
 
 export interface WatchOptions {
     url?: string
     token?: string
     output?: string
-    interval?: number
     silent?: boolean
 }
 
 /**
- * Watch for schema changes
+ * Watch for schema changes via SSE
  */
 export async function watch(options: WatchOptions): Promise<void> {
     const outputDir = options.output || getDefaultOutputDir()
-    const interval = options.interval || 5000
 
     const client = createApiClient({
         url: options.url,
@@ -41,12 +40,7 @@ export async function watch(options: WatchOptions): Promise<void> {
         process.exit(1)
     }
 
-    console.log(
-        `Watching for schema changes (polling every ${interval / 1000}s)...`,
-    )
-    console.log('Press Ctrl+C to stop.\n')
-
-    // Initial generation
+    // Initial generation if no types exist
     const initialHash = readLocalSchemaHash(outputDir)
     if (!initialHash) {
         console.log('No existing types found. Generating initial types...')
@@ -59,65 +53,70 @@ export async function watch(options: WatchOptions): Promise<void> {
     }
 
     let lastHash = readLocalSchemaHash(outputDir)
+    let generating = false
 
-    // Start polling
-    const poll = async () => {
-        try {
-            const { hash: remoteHash } = await client.getSchemaHash()
+    console.log('Watching for schema changes (SSE)...')
+    console.log('Press Ctrl+C to stop.\n')
 
-            if (lastHash !== remoteHash) {
-                console.log(
-                    `Schema change detected (${lastHash?.substring(0, 8) || 'none'} -> ${remoteHash.substring(0, 8)}...)`,
-                )
-                console.log('Regenerating types...')
+    const sse = new SseConnection({
+        url: client.sseUrl,
+        headers: client.getHeaders(),
+        async onEvent({ event, data }) {
+            if (event !== 'connected' || generating) return
 
-                const result = await generate({
-                    url: options.url,
-                    token: options.token,
-                    output: outputDir,
-                    silent: true,
-                })
+            try {
+                const { hash: remoteHash } = JSON.parse(data)
 
-                if (result.success) {
-                    console.log('Types regenerated successfully.\n')
-                    lastHash = remoteHash
-                } else {
-                    console.error('Failed to regenerate types:', result.error)
+                if (lastHash !== remoteHash) {
+                    generating = true
+                    console.log(
+                        `Schema change detected (${lastHash?.substring(0, 8) || 'none'} -> ${remoteHash.substring(0, 8)}...)`,
+                    )
+                    console.log('Regenerating types...')
+
+                    const result = await generate({
+                        url: options.url,
+                        token: options.token,
+                        output: outputDir,
+                        silent: true,
+                    })
+
+                    if (result.success) {
+                        console.log('Types regenerated successfully.\n')
+                        lastHash = remoteHash
+                    } else {
+                        console.error(
+                            'Failed to regenerate types:',
+                            result.error,
+                        )
+                    }
+                    generating = false
+                }
+            } catch {
+                generating = false
+            }
+        },
+        onError(err) {
+            // Silence connection errors — Strapi may be restarting
+            if (!options.silent) {
+                const msg = err instanceof Error ? err.message : String(err)
+                if (!msg.includes('ECONNREFUSED')) {
+                    console.error(`SSE error: ${msg}`)
                 }
             }
-        } catch {
-            // Silently ignore connection errors during polling
-            // The server might be restarting
-        }
-    }
+        },
+    })
 
-    // Poll with recursive setTimeout to avoid overlapping calls
-    let timeoutId: ReturnType<typeof setTimeout> | null = null
-    let stopping = false
-
-    const schedulePoll = () => {
-        if (stopping) return
-        timeoutId = setTimeout(async () => {
-            await poll()
-            schedulePoll()
-        }, interval)
-    }
-
-    await poll()
-    schedulePoll()
+    sse.connect()
 
     // Handle graceful shutdown
     const stop = () => {
-        stopping = true
-        if (timeoutId) clearTimeout(timeoutId)
+        console.log('\nStopping watch...')
+        sse.close()
         process.exit(0)
     }
 
-    process.on('SIGINT', () => {
-        console.log('\nStopping watch...')
-        stop()
-    })
-
+    process.on('SIGINT', stop)
     process.on('SIGTERM', stop)
 }
 
@@ -144,18 +143,12 @@ export function createWatchCommand(program: {
             '-o, --output <path>',
             'Output directory (default: node_modules/strapi-typed-client/dist)',
         )
-        .option(
-            '-i, --interval <ms>',
-            'Polling interval in milliseconds (default: 5000)',
-            parseInt,
-        )
         .option('-s, --silent', 'Suppress regeneration messages')
         .action(async (opts: WatchOptions) => {
             await watch({
                 url: opts.url,
                 token: opts.token,
                 output: opts.output,
-                interval: opts.interval,
                 silent: opts.silent,
             })
         })

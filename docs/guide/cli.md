@@ -60,7 +60,7 @@ npx strapi-types check --url http://localhost:1337 --token abc123
 
 ### `watch`
 
-Polls the Strapi schema endpoint at regular intervals and automatically regenerates types when the schema changes.
+Connects to the Strapi SSE stream and automatically regenerates types when the schema changes.
 
 ```bash
 npx strapi-types watch --url http://localhost:1337
@@ -68,9 +68,10 @@ npx strapi-types watch --url http://localhost:1337
 
 This is useful during development. The command runs continuously and:
 
-1. Fetches the schema hash from `/api/strapi-typed-client/schema-hash`
-2. Compares it to the last known hash
-3. Regenerates types only when the hash changes
+1. Opens an SSE connection to `/api/strapi-typed-client/schema-watch`
+2. Receives the current schema hash on connect
+3. Regenerates types only when the hash differs from the local one
+4. Automatically reconnects if the Strapi server restarts
 
 ::: tip
 For Next.js projects, consider using the `withStrapiTypes` wrapper instead of running `watch` manually. See the [Next.js guide](/guide/nextjs).

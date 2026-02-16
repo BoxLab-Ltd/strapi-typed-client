@@ -26,6 +26,22 @@ export class ApiClient {
         this.timeout = options.timeout || 30000
     }
 
+    /** Full URL for the SSE schema-watch endpoint */
+    get sseUrl(): string {
+        return `${this.baseUrl}/api/strapi-typed-client/schema-watch`
+    }
+
+    /** Build request headers (auth + content-type) */
+    getHeaders(): Record<string, string> {
+        const headers: Record<string, string> = {
+            'Content-Type': 'application/json',
+        }
+        if (this.token) {
+            headers['Authorization'] = `Bearer ${this.token}`
+        }
+        return headers
+    }
+
     /**
      * Fetch the full schema from Strapi
      */
@@ -63,14 +79,7 @@ export class ApiClient {
      */
     private async request<T>(path: string): Promise<T> {
         const url = `${this.baseUrl}${path}`
-
-        const headers: Record<string, string> = {
-            'Content-Type': 'application/json',
-        }
-
-        if (this.token) {
-            headers['Authorization'] = `Bearer ${this.token}`
-        }
+        const headers = this.getHeaders()
 
         const controller = new AbortController()
         const timeoutId = setTimeout(() => controller.abort(), this.timeout)

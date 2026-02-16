@@ -20,4 +20,12 @@ export default [
             auth: false,
         },
     },
+    {
+        method: 'GET',
+        path: '/schema-watch',
+        handler: 'schema.schemaWatch',
+        config: {
+            auth: false,
+        },
+    },
 ]

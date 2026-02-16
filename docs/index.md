@@ -24,7 +24,7 @@ features:
       details: TypeScript automatically infers the return type based on your populate parameter. Nested populate is supported too — what you ask for is what you get in the type.
       icon: "\uD83C\uDFAF"
     - title: Next.js Support
-      details: First-class Next.js integration with withStrapiTypes config wrapper, automatic schema polling in dev, and built-in cache options for ISR and revalidation.
+      details: First-class Next.js integration with withStrapiTypes config wrapper, instant schema watching via SSE in dev, and built-in cache options for ISR and revalidation.
       icon: "\u25B2"
     - title: DynamicZone & Components
       details: Dynamic zones are generated as discriminated union types. Components are standalone interfaces. Everything composes naturally.

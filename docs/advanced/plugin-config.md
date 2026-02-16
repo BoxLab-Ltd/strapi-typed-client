@@ -138,7 +138,7 @@ curl -H "Authorization: Bearer YOUR_TOKEN" \
 
 ### `GET /api/strapi-typed-client/schema-hash`
 
-Returns only the schema hash. This is a lightweight endpoint designed for polling in watch mode, avoiding the overhead of transmitting the full schema on every check.
+Returns only the schema hash. Useful for one-off checks or CI pipelines.
 
 **Response format:**
 
@@ -153,6 +153,19 @@ Returns only the schema hash. This is a lightweight endpoint designed for pollin
 ```bash
 curl http://localhost:1337/api/strapi-typed-client/schema-hash
 ```
+
+### `GET /api/strapi-typed-client/schema-watch`
+
+SSE (Server-Sent Events) stream for watch mode. On connect, immediately sends the current schema hash. When the Strapi server restarts, the connection drops and the client reconnects automatically.
+
+**Event format:**
+
+```
+event: connected
+data: {"hash":"a1b2c3d4e5f6..."}
+```
+
+The CLI and `withStrapiTypes` wrapper use this endpoint in watch mode instead of polling.
 
 ## Creating an API Token
 
@@ -223,10 +236,10 @@ This means:
 
 - If the schema has not changed, the CLI skips regeneration entirely.
 - Only a tiny JSON payload is transferred on each check.
-- In watch mode, the CLI periodically polls `/schema-hash` and only fetches the full schema when the hash changes.
+- In watch mode, the CLI connects to the SSE endpoint `/schema-watch` and receives the hash on connect. When the Strapi server restarts, the connection drops and the client reconnects — receiving the (potentially new) hash automatically.
 
 ::: tip
-The hash-based approach makes watch mode efficient even for large schemas. The `/schema-hash` endpoint is fast and returns minimal data, so frequent polling has negligible impact on server performance.
+The SSE approach makes watch mode more efficient than polling — no repeated requests, instant detection of schema changes on server restart.
 :::
 
 ## Security Considerations
