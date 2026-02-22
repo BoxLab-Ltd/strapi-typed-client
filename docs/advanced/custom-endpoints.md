@@ -34,6 +34,19 @@ export default {
 }
 ```
 
+Both the short handler format and the full Strapi UID format are supported:
+
+```typescript
+// Short format
+handler: 'article.publish'
+
+// Full format (api:: prefix)
+handler: 'api::article.article.publish'
+
+// Plugin format
+handler: 'plugin::my-plugin.controller.action'
+```
+
 ### 2. Add an `Endpoints` interface to the controller
 
 The plugin looks for an `export interface Endpoints` in the controller file. Each key maps to a handler action, and you can specify `body` (request) and `response` types:

@@ -148,8 +148,15 @@ export class RoutesParser {
             return null
         }
 
-        // Parse handler: 'controller.action' → controller='controller', action='action'
-        const [controller, action] = handler.split('.')
+        // Parse handler: strip "api::xxx." or "plugin::xxx." prefix if present
+        let normalizedHandler = handler
+        if (normalizedHandler.includes('::')) {
+            const afterPrefix = normalizedHandler.split('::')[1]
+            const prefixParts = afterPrefix.split('.')
+            normalizedHandler = prefixParts.slice(1).join('.') || prefixParts[0]
+        }
+
+        const [controller, action] = normalizedHandler.split('.')
         if (!controller || !action) {
             return null
         }

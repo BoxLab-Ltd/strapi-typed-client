@@ -39,10 +39,27 @@ interface StrapiApiEntry {
 
 /**
  * Parse handler string to extract controller and action
- * e.g. "checkout.buyPlan" -> { controller: "checkout", action: "buyPlan" }
+ * Supports both short and full Strapi handler formats:
+ *   "checkout.buyPlan" -> { controller: "checkout", action: "buyPlan" }
+ *   "api::item.item.customAction" -> { controller: "item", action: "customAction" }
+ *   "plugin::users-permissions.user.find" -> { controller: "user", action: "find" }
  */
 function parseHandler(handler: string): { controller: string; action: string } {
-    const parts = handler.split('.')
+    let normalized = handler
+
+    // Strip "api::xxx." or "plugin::xxx." prefix
+    if (normalized.includes('::')) {
+        const afterPrefix = normalized.split('::')[1]
+        const prefixParts = afterPrefix.split('.')
+
+        normalized = prefixParts.slice(1).join('.')
+
+        if (!normalized) {
+            normalized = prefixParts[0]
+        }
+    }
+
+    const parts = normalized.split('.')
     if (parts.length >= 2) {
         return {
             controller: parts[0],
@@ -50,7 +67,7 @@ function parseHandler(handler: string): { controller: string; action: string } {
         }
     }
     return {
-        controller: handler,
+        controller: normalized,
         action: 'index',
     }
 }
