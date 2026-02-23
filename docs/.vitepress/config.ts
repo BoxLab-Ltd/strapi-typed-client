@@ -1,4 +1,6 @@
 import { defineConfig } from 'vitepress'
+import { copyOrDownloadAsMarkdownButtons } from 'vitepress-plugin-llms'
+import llmstxt from 'vitepress-plugin-llms'
 
 export default defineConfig({
     title: 'strapi-typed-client',
@@ -119,6 +121,17 @@ export default defineConfig({
         footer: {
             message: 'Released under the MIT License.',
             copyright: 'Copyright © BoxLab Ltd',
+        },
+    },
+
+    vite: {
+        // @ts-expect-error - Installing Vite v6 would fix this error, but it causes other issues with VitePress, so we'll ignore it for now
+        plugins: [llmstxt()],
+    },
+
+    markdown: {
+        config(md) {
+            md.use(copyOrDownloadAsMarkdownButtons)
         },
     },
 })
