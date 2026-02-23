@@ -1,6 +1,5 @@
 import { defineConfig } from 'vitepress'
-import { copyOrDownloadAsMarkdownButtons } from 'vitepress-plugin-llms'
-import llmstxt from 'vitepress-plugin-llms'
+import llmstxt, { copyOrDownloadAsMarkdownButtons } from 'vitepress-plugin-llms'
 
 export default defineConfig({
     title: 'strapi-typed-client',
