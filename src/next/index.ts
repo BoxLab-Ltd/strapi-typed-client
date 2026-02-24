@@ -7,7 +7,7 @@
  *   export default withStrapiTypes()(nextConfig)
  */
 
-import { execSync } from 'child_process'
+import { execFileSync } from 'child_process'
 import * as fs from 'fs'
 import { createRequire } from 'module'
 import * as path from 'path'
@@ -162,25 +162,24 @@ function runBuildGenerate(config: StrapiTypesConfig): void {
     const binPath = path.join(getPackageDir(), 'dist', 'cli', 'index.js')
 
     const args = [
-        'node',
-        JSON.stringify(binPath),
+        binPath,
         'generate',
         '--force',
         '--silent',
         '--output',
-        JSON.stringify(outputDir),
+        outputDir,
         '--url',
-        JSON.stringify(url),
+        url,
     ]
 
     if (token) {
-        args.push('--token', JSON.stringify(token))
+        args.push('--token', token)
     }
 
     try {
         const stop = loading(silent, 'Generating types')
         const start = Date.now()
-        execSync(args.join(' '), { stdio: 'ignore' })
+        execFileSync('node', args, { stdio: 'ignore' })
         stop()
         ok(silent, `Types generated in ${dim(`${Date.now() - start}ms`)}`)
     } catch {

@@ -27,6 +27,7 @@ export function ensureDir(dirPath: string): void {
 export function writeFile(filePath: string, content: string): WriteResult {
     try {
         ensureDir(path.dirname(filePath))
+        // codeql[js/http-to-file-access] - Generated TypeScript code from parsed Strapi schema, not raw network data
         fs.writeFileSync(filePath, content, 'utf-8')
         return { path: filePath, success: true }
     } catch (error) {
