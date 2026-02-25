@@ -69,6 +69,7 @@ export interface ExtractedSchema {
 export interface SchemaResponse {
     schema: ExtractedSchema
     endpoints: ParsedEndpoint[]
+    pluginEndpoints?: ParsedEndpoint[]
     extraTypes: ExtraControllerType[]
     hash: string
     generatedAt: string

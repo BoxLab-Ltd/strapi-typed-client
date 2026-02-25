@@ -147,6 +147,11 @@ ${bodyBlock}
         // Convert ':param' to '${param}'
         let pathTemplate = route.path
 
+        // Add plugin prefix for plugin routes that don't have an empty prefix override
+        if (route.pluginName && route.prefix !== '') {
+            pathTemplate = `/${route.pluginName}${pathTemplate}`
+        }
+
         // Convert :param to ${param}
         pathTemplate = pathTemplate.replace(
             /:([a-zA-Z_][a-zA-Z0-9_]*)/g,

@@ -111,8 +111,17 @@ export async function generate(
             console.log(`Fetching schema from ${baseUrl}...`)
         }
 
-        const { schema, endpoints, extraTypes, hash, generatedAt } =
-            await client.getSchema()
+        const {
+            schema,
+            endpoints: apiEndpoints,
+            pluginEndpoints,
+            extraTypes,
+            hash,
+            generatedAt,
+        } = await client.getSchema()
+
+        // Merge API and plugin endpoints for generation
+        const endpoints = [...(apiEndpoints || []), ...(pluginEndpoints || [])]
 
         if (!options.silent) {
             console.log(

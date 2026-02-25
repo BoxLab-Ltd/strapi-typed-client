@@ -156,11 +156,17 @@ export class StrapiTypeParser {
         // ApiItemItem -> Item
         const cleanName = this.extractCleanName(interfaceName)
 
+        // Detect plugin content types
+        const pluginName = interfaceName.startsWith('PluginUsersPermissions')
+            ? 'users-permissions'
+            : undefined
+
         return {
             name: interfaceName,
             cleanName,
             collectionName,
             kind,
+            pluginName,
             attributes,
             relations,
             media,

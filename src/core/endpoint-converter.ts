@@ -41,6 +41,8 @@ export function convertEndpointsToRoutes(
             controller: endpoint.controller,
             action: endpoint.action,
             params: extractPathParams(endpoint.path),
+            ...(endpoint.prefix !== undefined && { prefix: endpoint.prefix }),
+            ...(endpoint.pluginName && { pluginName: endpoint.pluginName }),
         }
 
         all.push(route)

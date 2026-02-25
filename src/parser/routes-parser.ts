@@ -9,6 +9,8 @@ export interface ParsedRoute {
     controller: string // extracted from handler (e.g., 'item' from 'item.incrementRun')
     action: string // extracted from handler (e.g., 'incrementRun' from 'item.incrementRun')
     params: string[] // extracted from path (e.g., ['id'] from '/items/:id/action')
+    pluginName?: string // e.g., 'users-permissions' for plugin routes
+    prefix?: string // from config.prefix (undefined = default plugin prefix)
 }
 
 export interface ParsedRoutes {
@@ -58,6 +60,16 @@ export class RoutesParser {
                 const routes = this.parseJavaScriptFile(filePath)
 
                 for (const route of routes) {
+                    // Set pluginName from handler prefix (e.g., 'plugin::users-permissions.role.find')
+                    // or default to 'users-permissions' for files in the plugins directory
+                    if (!route.pluginName) {
+                        const handlerMatch =
+                            route.handler.match(/^plugin::([^.]+)\./)
+                        route.pluginName = handlerMatch
+                            ? handlerMatch[1]
+                            : 'users-permissions'
+                    }
+
                     result.all.push(route)
 
                     if (!result.byController.has(route.controller)) {
@@ -123,6 +135,7 @@ export class RoutesParser {
         let method: string | undefined
         let pathValue: string | undefined
         let handler: string | undefined
+        let prefix: string | undefined
 
         for (const prop of obj.properties) {
             if (!ts.isPropertyAssignment(prop)) continue
@@ -141,6 +154,21 @@ export class RoutesParser {
                 pathValue = value
             } else if (propName === 'handler' && value) {
                 handler = value
+            } else if (
+                propName === 'config' &&
+                ts.isObjectLiteralExpression(prop.initializer)
+            ) {
+                // Extract config.prefix
+                for (const configProp of prop.initializer.properties) {
+                    if (
+                        ts.isPropertyAssignment(configProp) &&
+                        ts.isIdentifier(configProp.name) &&
+                        configProp.name.text === 'prefix' &&
+                        ts.isStringLiteral(configProp.initializer)
+                    ) {
+                        prefix = configProp.initializer.text
+                    }
+                }
             }
         }
 
@@ -171,6 +199,7 @@ export class RoutesParser {
             controller,
             action,
             params,
+            ...(prefix !== undefined && { prefix }),
         }
     }
 
@@ -202,9 +231,12 @@ export class RoutesParser {
                         left.expression.text === 'module' &&
                         left.name.text === 'exports'
                     ) {
-                        // Right side should be an arrow function
+                        // Right side can be an arrow function or a plain array
                         const right = expr.right
-                        if (ts.isArrowFunction(right)) {
+                        if (ts.isArrayLiteralExpression(right)) {
+                            // Plain array: module.exports = [...]
+                            this.parseRoutesArray(right, routes)
+                        } else if (ts.isArrowFunction(right)) {
                             // Find the return statement or direct array expression
                             const body = right.body
 

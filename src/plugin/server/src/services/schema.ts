@@ -167,13 +167,20 @@ export default ({ strapi }: { strapi: any }) => ({
             // Endpoints service might not be available, continue without endpoints
         }
 
-        // Include endpoints and extraTypes in hash computation for complete change detection
+        // Separate plugin endpoints from API endpoints
+        // Plugin endpoints are used by the generator for correct route prefixing
+        // but hidden from the admin panel by default
+        const apiEndpoints = endpoints.filter(e => !e.pluginName)
+        const pluginEndpoints = endpoints.filter(e => !!e.pluginName)
+
+        // Include ALL endpoints in hash computation for complete change detection
         const hashData = { schema, endpoints, extraTypes }
         const hash = computeSchemaHash(hashData)
 
         return {
             schema,
-            endpoints,
+            endpoints: apiEndpoints,
+            pluginEndpoints,
             extraTypes,
             hash,
             generatedAt: new Date().toISOString(),

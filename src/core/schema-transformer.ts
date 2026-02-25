@@ -103,11 +103,17 @@ function transformContentType(uid: string, ct: StrapiContentType): ContentType {
         }
     }
 
+    // Detect plugin content types from uid
+    const pluginName = uid.startsWith('plugin::')
+        ? uid.split('::')[1].split('.')[0] // e.g., 'users-permissions'
+        : undefined
+
     return {
         name: uidToInterfaceName(uid),
         cleanName,
         collectionName: ct.collectionName,
         kind,
+        pluginName,
         attributes,
         relations,
         media,

@@ -23,6 +23,8 @@ export interface ParsedEndpoint {
     controller: string
     action: string
     types?: EndpointType
+    prefix?: string // from route config.prefix (undefined = default plugin prefix)
+    pluginName?: string // e.g., 'users-permissions' for plugin routes
 }
 
 /**

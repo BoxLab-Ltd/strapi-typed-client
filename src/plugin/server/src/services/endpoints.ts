@@ -27,6 +27,7 @@ interface StrapiRoute {
         auth?: boolean | { scope?: string[] }
         policies?: string[]
         middlewares?: string[]
+        prefix?: string
     }
 }
 
@@ -603,10 +604,28 @@ export default ({ strapi }: { strapi: any }) => ({
                 strapi.log.debug(
                     `[strapi-types] Found ${fromFiles.endpoints.length} routes from files`,
                 )
+
+                // Also extract plugin routes
+                this.extractPluginRoutes(
+                    fromFiles.endpoints,
+                    'users-permissions',
+                )
+
                 return {
                     endpoints: fromFiles.endpoints,
                     extraTypes: fromFiles.extraTypes,
                     count: fromFiles.endpoints.length,
+                }
+            }
+
+            // Even with no API routes, extract plugin routes
+            this.extractPluginRoutes(endpoints, 'users-permissions')
+            if (endpoints.length > 0) {
+                const extraTypes = this.extractExtraTypes(strapiDir)
+                return {
+                    endpoints,
+                    extraTypes,
+                    count: endpoints.length,
                 }
             }
 
@@ -747,6 +766,9 @@ export default ({ strapi }: { strapi: any }) => ({
             }
         }
 
+        // Extract routes from users-permissions plugin
+        this.extractPluginRoutes(endpoints, 'users-permissions')
+
         // Sort endpoints by path for consistent output
         endpoints.sort((a, b) => {
             const pathCompare = a.path.localeCompare(b.path)
@@ -761,6 +783,63 @@ export default ({ strapi }: { strapi: any }) => ({
             endpoints,
             extraTypes,
             count: endpoints.length,
+        }
+    },
+
+    /**
+     * Extract routes from a Strapi plugin (e.g., users-permissions)
+     * and append them to the endpoints array with pluginName and prefix set.
+     */
+    extractPluginRoutes(endpoints: ParsedEndpoint[], pluginName: string): void {
+        try {
+            const plugin = strapi.plugin(pluginName)
+            if (!plugin) return
+
+            // Access plugin routes — Strapi stores them in plugin.routes['content-api']
+            const contentApiRoutes = plugin.routes?.['content-api']
+            if (!contentApiRoutes) return
+
+            let routes: StrapiRoute[] = []
+            if (Array.isArray(contentApiRoutes)) {
+                routes = contentApiRoutes
+            } else if (
+                contentApiRoutes.routes &&
+                Array.isArray(contentApiRoutes.routes)
+            ) {
+                routes = contentApiRoutes.routes
+            }
+
+            strapi.log.debug(
+                `[strapi-types] Plugin "${pluginName}" has ${routes.length} content-api routes`,
+            )
+
+            for (const route of routes) {
+                if (!route.handler || typeof route.handler !== 'string')
+                    continue
+
+                // Normalize handler to full uid format: plugin::users-permissions.role.find
+                const fullHandler = route.handler.includes('::')
+                    ? route.handler
+                    : `plugin::${pluginName}.${route.handler}`
+                const { controller, action } = parseHandler(fullHandler)
+                const prefix = route.config?.prefix
+
+                endpoints.push({
+                    method: route.method.toUpperCase(),
+                    path: route.path.startsWith('/')
+                        ? route.path
+                        : `/${route.path}`,
+                    handler: fullHandler,
+                    controller,
+                    action,
+                    pluginName,
+                    ...(prefix !== undefined && { prefix }),
+                })
+            }
+        } catch (error) {
+            strapi.log.debug(
+                `[strapi-types] Error extracting plugin routes for ${pluginName}: ${error}`,
+            )
         }
     },
 

@@ -10,6 +10,7 @@ export interface ContentType {
     cleanName: string // e.g., "Item"
     collectionName: string
     kind: 'collection' | 'single'
+    pluginName?: string // e.g., 'users-permissions' for plugin content types
     attributes: Attribute[] // Scalar fields only (no relations, media, or components)
     relations: Relation[] // Relations stored separately for Prisma-like behavior
     media: MediaField[] // Media fields require populate

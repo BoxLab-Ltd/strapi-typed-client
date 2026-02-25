@@ -988,7 +988,22 @@ ${customMethods}
                       ? 'SingleTypeAPI'
                       : 'CollectionAPI'
                 const propName = toCamelCase(endpoint)
-                return `    this.${propName} = new ${apiClass}('${endpoint}', this.config)`
+
+                // Determine final endpoint with plugin prefix
+                // Plugin content types get prefix by default, unless routes explicitly set prefix: ''
+                let finalEndpoint = endpoint
+                if (contentType.pluginName) {
+                    const controllerRoutes =
+                        parsedRoutes?.byController.get(controllerName)
+                    const hasEmptyPrefix = controllerRoutes?.some(
+                        r => r.prefix === '',
+                    )
+                    if (!hasEmptyPrefix) {
+                        finalEndpoint = `${contentType.pluginName}/${endpoint}`
+                    }
+                }
+
+                return `    this.${propName} = new ${apiClass}('${finalEndpoint}', this.config)`
             })
             .join('\n')
 
