@@ -137,6 +137,8 @@ The client uses the global `fetch` by default. In Next.js, this means you automa
 
 ::: tip What if I skip the generate step?
 The package ships with a stub that lets `import { StrapiClient } from 'strapi-typed-client'` resolve without errors. However, creating a `StrapiClient` instance will throw a clear error reminding you to run `npx strapi-types generate`.
+
+The error is skipped when `NODE_ENV === 'production'`. For other environments like staging, set `STRAPI_TYPES_SKIP_CHECK=true` to opt out.
 :::
 
 ## Next Steps

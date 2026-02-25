@@ -43,8 +43,14 @@ export class StrapiConnectionError extends Error {
     }
 }
 
+const SKIP_STUB_CHECK =
+    process.env.NODE_ENV === 'production' ||
+    process.env.STRAPI_TYPES_SKIP_CHECK === 'true'
+
 export class StrapiClient {
     constructor(_config: { baseURL: string; token?: string }) {
-        throw new Error(NOT_GENERATED_MESSAGE)
+        if (!SKIP_STUB_CHECK) {
+            throw new Error(NOT_GENERATED_MESSAGE)
+        }
     }
 }
