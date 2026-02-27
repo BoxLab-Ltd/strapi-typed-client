@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { AuthApiGenerator } from '../../../src/generator/auth-api-generator.js'
-import type { ParsedRoute } from '../../../src/parser/routes-parser.js'
+import type { ParsedRoute } from '../../../src/shared/route-types.js'
 
 const generator = new AuthApiGenerator()
 
@@ -455,5 +455,67 @@ describe('generateAuthApiClass - dynamic (with routes)', () => {
         expect(resultWithCrud).not.toMatch(/async create\(/)
         expect(resultWithCrud).not.toMatch(/async update\(/)
         expect(resultWithCrud).not.toMatch(/async delete\(/)
+    })
+})
+
+describe('generateAuthApiClass - dynamic with full plugin:: handler format', () => {
+    const authRoutes: ParsedRoute[] = [
+        {
+            method: 'POST',
+            path: '/auth/local',
+            handler: 'plugin::users-permissions.auth.callback',
+            controller: 'auth',
+            action: 'callback',
+            params: [],
+        },
+        {
+            method: 'POST',
+            path: '/auth/local/register',
+            handler: 'plugin::users-permissions.auth.register',
+            controller: 'auth',
+            action: 'register',
+            params: [],
+        },
+        {
+            method: 'GET',
+            path: '/auth/:provider/callback',
+            handler: 'plugin::users-permissions.auth.callback',
+            controller: 'auth',
+            action: 'callback',
+            params: ['provider'],
+        },
+    ]
+
+    const userRoutes: ParsedRoute[] = [
+        {
+            method: 'GET',
+            path: '/users/me',
+            handler: 'plugin::users-permissions.user.me',
+            controller: 'user',
+            action: 'me',
+            params: [],
+        },
+    ]
+
+    const result = generator.generateAuthApiClass(authRoutes, userRoutes)
+
+    it('should rename POST /auth/local callback to login even with full handler', () => {
+        expect(result).toContain('async login(')
+        expect(result).toContain('data: LoginCredentials')
+        expect(result).toContain('Promise<AuthResponse>')
+    })
+
+    it('should generate OAuth callback method with full handler', () => {
+        expect(result).toContain('async callback(')
+        expect(result).toContain('provider: string')
+    })
+
+    it('should generate register method with full handler', () => {
+        expect(result).toContain('async register(')
+        expect(result).toContain('data: RegisterData')
+    })
+
+    it('should generate me method with full handler', () => {
+        expect(result).toContain('async me(')
     })
 })

@@ -9,7 +9,6 @@
  *   npx strapi-types generate --url http://localhost:1337
  *   npx strapi-types check --url http://localhost:1337
  *   npx strapi-types watch --url http://localhost:1337
- *   npx strapi-types generate --local  # Use local .d.ts files
  */
 
 import { Command } from 'commander'

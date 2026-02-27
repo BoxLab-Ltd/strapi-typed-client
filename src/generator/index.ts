@@ -12,14 +12,12 @@ import type {
 
 export class Generator {
     private outputDir: string
-    private inputDir?: string
     private typesGenerator: TypesGenerator
     private clientGenerator: ClientGenerator
     private indexGenerator: IndexGenerator
 
-    constructor(outputDir: string, inputDir?: string) {
+    constructor(outputDir: string) {
         this.outputDir = outputDir
-        this.inputDir = inputDir
         this.typesGenerator = new TypesGenerator()
         this.clientGenerator = new ClientGenerator()
         this.indexGenerator = new IndexGenerator()
@@ -39,7 +37,6 @@ export class Generator {
         const typesContent = this.typesGenerator.generate(schema)
         const clientContent = this.clientGenerator.generate(
             schema,
-            this.inputDir,
             endpoints,
             extraTypes,
         )

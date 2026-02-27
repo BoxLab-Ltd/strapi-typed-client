@@ -2,9 +2,8 @@ import { Project, SourceFile } from 'ts-morph'
 import { ParsedSchema, ContentType } from '../schema-types.js'
 import { TypeTransformer } from '../transformer/index.js'
 import { AuthApiGenerator } from './auth-api-generator.js'
-import { RoutesParser, ParsedRoutes } from '../parser/routes-parser.js'
+import type { ParsedRoutes } from '../shared/route-types.js'
 import { CustomApiGenerator } from './custom-api-generator.js'
-import { CustomTypesParser } from '../parser/custom-types-parser.js'
 import { toCamelCase, toPascalCase } from '../shared/index.js'
 import type {
     ParsedEndpoint,
@@ -14,26 +13,20 @@ import {
     convertEndpointsToRoutes,
     convertEndpointsToCustomTypes,
 } from '../core/endpoint-converter.js'
-import * as path from 'path'
 
 export class ClientGenerator {
     private transformer: TypeTransformer
     private authApiGenerator: AuthApiGenerator
-    private routesParser: RoutesParser
     private customApiGenerator: CustomApiGenerator
-    private customTypesParser: CustomTypesParser
 
     constructor() {
         this.transformer = new TypeTransformer()
         this.authApiGenerator = new AuthApiGenerator()
-        this.routesParser = new RoutesParser()
         this.customApiGenerator = new CustomApiGenerator()
-        this.customTypesParser = new CustomTypesParser()
     }
 
     generate(
         schema: ParsedSchema,
-        inputDir?: string,
         endpoints?: ParsedEndpoint[],
         extraTypes?: ExtraControllerType[],
     ): string {
@@ -44,20 +37,11 @@ export class ClientGenerator {
         let parsedRoutes: ParsedRoutes | undefined
 
         if (endpoints && endpoints.length > 0) {
-            // Remote mode: convert endpoints from Strapi plugin
             parsedRoutes = convertEndpointsToRoutes(endpoints)
             const customTypes = convertEndpointsToCustomTypes(
                 endpoints,
                 extraTypes,
             )
-            this.customApiGenerator.setCustomTypes(customTypes)
-        } else if (inputDir) {
-            // Local mode: parse from filesystem
-            const routesDir = path.join(inputDir, 'routes')
-            parsedRoutes = this.routesParser.parse(routesDir)
-
-            // Parse custom types
-            const customTypes = this.customTypesParser.parse(inputDir)
             this.customApiGenerator.setCustomTypes(customTypes)
         }
 

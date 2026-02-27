@@ -1,5 +1,5 @@
 import { Project } from 'ts-morph'
-import { ParsedRoute } from '../parser/routes-parser.js'
+import { ParsedRoute } from '../shared/route-types.js'
 import { toCamelCase } from '../shared/index.js'
 
 export class AuthApiGenerator {
@@ -331,7 +331,7 @@ ${userMethods}
 
         // Special case: rename auth.callback on /auth/local to "login"
         if (
-            route.handler === 'auth.callback' &&
+            route.action === 'callback' &&
             route.path === '/auth/local' &&
             route.method === 'POST'
         ) {
@@ -528,10 +528,7 @@ ${bodyBlock}
             route.method === 'PATCH'
         ) {
             // Infer data type based on action
-            if (
-                route.handler === 'auth.callback' &&
-                route.path === '/auth/local'
-            ) {
+            if (route.action === 'callback' && route.path === '/auth/local') {
                 params.push('data: LoginCredentials')
             } else if (route.action === 'register') {
                 params.push('data: RegisterData')

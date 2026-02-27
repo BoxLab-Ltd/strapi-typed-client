@@ -146,7 +146,7 @@ export async function generate(
             console.log('Generating TypeScript types...')
         }
 
-        const generator = new Generator(outputDir, undefined)
+        const generator = new Generator(outputDir)
         await generator.generate(parsedSchema, endpoints, extraTypes)
 
         // Track generated files

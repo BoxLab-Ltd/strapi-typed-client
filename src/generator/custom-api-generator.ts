@@ -1,5 +1,5 @@
-import { ParsedRoute } from '../parser/routes-parser.js'
-import { ParsedCustomTypes } from '../parser/custom-types-parser.js'
+import { ParsedRoute } from '../shared/route-types.js'
+import { ParsedCustomTypes } from '../shared/custom-types.js'
 import { toCamelCase } from '../shared/string-utils.js'
 
 export class CustomApiGenerator {

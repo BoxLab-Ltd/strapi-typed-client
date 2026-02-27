@@ -14,11 +14,11 @@ import type {
     ParsedEndpoint,
     ExtraControllerType,
 } from '../shared/endpoint-types.js'
-import type { ParsedRoute, ParsedRoutes } from '../parser/routes-parser.js'
+import type { ParsedRoute, ParsedRoutes } from '../shared/route-types.js'
 import type {
     ParsedCustomTypes,
     CustomEndpointType,
-} from '../parser/custom-types-parser.js'
+} from '../shared/custom-types.js'
 import {
     extractPathParams,
     toPascalCasePreserve,
