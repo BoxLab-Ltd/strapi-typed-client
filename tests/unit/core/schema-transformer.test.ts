@@ -383,6 +383,7 @@ describe('Schema Transformer', () => {
             )
             expect(seoComp).toBeDefined()
             expect(seoComp!.category).toBe('shared')
+            expect(seoComp!.uid).toBe('shared.seo')
             expect(seoComp!.attributes).toHaveLength(3)
 
             const heroComp = result.components.find(
@@ -390,6 +391,7 @@ describe('Schema Transformer', () => {
             )
             expect(heroComp).toBeDefined()
             expect(heroComp!.category).toBe('landing')
+            expect(heroComp!.uid).toBe('landing.hero')
             expect(heroComp!.media).toHaveLength(1)
         })
 

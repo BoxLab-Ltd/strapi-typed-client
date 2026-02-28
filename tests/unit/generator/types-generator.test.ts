@@ -15,6 +15,7 @@ const mockComponents: Component[] = [
         name: 'ProjectConfig',
         cleanName: 'ProjectConfig',
         category: 'project',
+        uid: 'project.project-config',
         attributes: [
             { name: 'key', type: { kind: 'string' }, required: true },
             { name: 'value', type: { kind: 'string' }, required: true },
@@ -28,6 +29,7 @@ const mockComponents: Component[] = [
         name: 'LandingHero',
         cleanName: 'LandingHero',
         category: 'landing',
+        uid: 'landing.hero',
         attributes: [
             { name: 'title', type: { kind: 'string' }, required: true },
         ],
@@ -40,6 +42,7 @@ const mockComponents: Component[] = [
         name: 'LandingFeature',
         cleanName: 'LandingFeature',
         category: 'landing',
+        uid: 'landing.feature',
         attributes: [
             { name: 'label', type: { kind: 'string' }, required: true },
         ],
@@ -273,16 +276,18 @@ describe('TypesGenerator', () => {
     // Component interfaces
     // ================================================================
     describe('Component interfaces', () => {
-        it('should generate ProjectConfig component with id field', () => {
+        it('should generate ProjectConfig component with id and __component fields', () => {
             expect(output).toContain('export interface ProjectConfig {')
             expect(output).toContain('  id: number')
+            expect(output).toContain("  __component: 'project.project-config'")
             expect(output).toContain('  key: string')
             expect(output).toContain('  value: string')
         })
 
-        it('should generate LandingHero component with media field', () => {
+        it('should generate LandingHero component with __component and media field', () => {
             expect(output).toContain('export interface LandingHero {')
             expect(output).toContain('  id: number')
+            expect(output).toContain("  __component: 'landing.hero'")
             expect(output).toContain('  title: string')
             expect(output).toContain('  image: MediaFile')
         })
@@ -305,9 +310,10 @@ describe('TypesGenerator', () => {
             expect(output).toContain('  category?: number | null')
         })
 
-        it('should generate ProjectConfigInput for component', () => {
+        it('should generate ProjectConfigInput for component with __component', () => {
             expect(output).toContain('export interface ProjectConfigInput {')
             expect(output).toContain('  id?: number')
+            expect(output).toContain("  __component: 'project.project-config'")
             expect(output).toContain('  key?: string')
             expect(output).toContain('  value?: string')
         })

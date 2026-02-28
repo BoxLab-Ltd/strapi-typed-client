@@ -163,6 +163,7 @@ function transformComponent(uid: string, comp: StrapiComponent): Component {
         name: cleanName,
         cleanName,
         category,
+        uid,
         attributes,
         relations,
         media,

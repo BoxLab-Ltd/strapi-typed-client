@@ -232,6 +232,7 @@ type _ApplyFields<TFull, TBase, TEntry> = TEntry extends true ? TFull : TEntry e
             isExported: true,
             properties: [
                 { name: 'id', type: 'number' },
+                { name: '__component', type: `'${component.uid}'` },
                 ...component.attributes.map(attr => ({
                     name: attr.name,
                     type: this.transformer.toTypeScript(
@@ -292,6 +293,7 @@ type _ApplyFields<TFull, TBase, TEntry> = TEntry extends true ? TFull : TEntry e
             isExported: true,
             properties: [
                 { name: 'id', type: 'number', hasQuestionToken: true },
+                { name: '__component', type: `'${component.uid}'` },
                 ...component.attributes.map(attr => ({
                     name: attr.name,
                     type: this.transformer.toTypeScript(attr.type, false),

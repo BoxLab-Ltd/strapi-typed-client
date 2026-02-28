@@ -22,6 +22,7 @@ export interface Component {
     name: string // e.g., "LandingEditorFeature"
     cleanName: string // e.g., "LandingEditorFeature"
     category: string // e.g., "landing"
+    uid: string // e.g., "landing.editor-feature" — used for __component discriminator
     attributes: Attribute[] // Scalar fields only (no relations, media, or components)
     relations: Relation[] // Relations stored separately
     media: MediaField[] // Media fields require populate
