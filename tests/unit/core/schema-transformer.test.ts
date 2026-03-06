@@ -487,6 +487,79 @@ describe('Schema Transformer', () => {
             )
         })
 
+        it('should transform i18n fields (locale and localizations) when present', () => {
+            const extracted: ExtractedSchema = {
+                contentTypes: {
+                    'api::page.page': {
+                        uid: 'api::page.page',
+                        kind: 'collectionType',
+                        collectionName: 'pages',
+                        info: {
+                            singularName: 'page',
+                            pluralName: 'pages',
+                            displayName: 'Page',
+                        },
+                        attributes: {
+                            title: { type: 'string', required: true },
+                            locale: { type: 'string', required: true },
+                            localizations: {
+                                type: 'relation',
+                                relation: 'oneToMany',
+                                target: 'api::page.page',
+                            },
+                        },
+                    },
+                },
+                components: {},
+            }
+
+            const result = transformSchema(extracted)
+            const ct = result.contentTypes[0]
+
+            // locale should be a regular string attribute
+            const localeAttr = ct.attributes.find(a => a.name === 'locale')
+            expect(localeAttr).toBeDefined()
+            expect(localeAttr!.type.kind).toBe('string')
+            expect(localeAttr!.required).toBe(true)
+
+            // localizations should be a self-referencing relation
+            const localizationsRel = ct.relations.find(
+                r => r.name === 'localizations',
+            )
+            expect(localizationsRel).toBeDefined()
+            expect(localizationsRel!.relationType).toBe('oneToMany')
+            expect(localizationsRel!.targetType).toBe('Page')
+        })
+
+        it('should not include i18n fields when they are absent from schema', () => {
+            const extracted: ExtractedSchema = {
+                contentTypes: {
+                    'api::post.post': {
+                        uid: 'api::post.post',
+                        kind: 'collectionType',
+                        collectionName: 'posts',
+                        info: {
+                            singularName: 'post',
+                            pluralName: 'posts',
+                            displayName: 'Post',
+                        },
+                        attributes: {
+                            title: { type: 'string', required: true },
+                        },
+                    },
+                },
+                components: {},
+            }
+
+            const result = transformSchema(extracted)
+            const ct = result.contentTypes[0]
+
+            expect(ct.attributes.find(a => a.name === 'locale')).toBeUndefined()
+            expect(
+                ct.relations.find(r => r.name === 'localizations'),
+            ).toBeUndefined()
+        })
+
         it('should handle kebab-case names correctly', () => {
             const extracted: ExtractedSchema = {
                 contentTypes: {

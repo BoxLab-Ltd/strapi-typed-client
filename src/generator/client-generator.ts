@@ -232,6 +232,11 @@ import qs from 'qs'`
                     type: 'TFields[]',
                     hasQuestionToken: true,
                 },
+                {
+                    name: 'locale',
+                    type: 'string',
+                    hasQuestionToken: true,
+                },
             ],
         })
 

@@ -18,13 +18,7 @@ export const SYSTEM_FIELDS = [
  * Private/internal Strapi fields that should be excluded from generated types
  * These fields are managed by Strapi and not accessible via API
  */
-export const PRIVATE_FIELDS = [
-    'createdBy',
-    'updatedBy',
-    'publishedAt',
-    'locale',
-    'localizations',
-] as const
+export const PRIVATE_FIELDS = ['createdBy', 'updatedBy', 'publishedAt'] as const
 
 /**
  * All fields to skip when generating entity types
