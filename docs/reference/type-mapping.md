@@ -102,11 +102,13 @@ The following fields from the Strapi schema are **not** included in generated ty
 | `createdBy`                  | Admin-only field                              |
 | `updatedBy`                  | Admin-only field                              |
 | `publishedAt`                | Managed by Strapi internally                  |
-| `locale`                     | i18n internal field                           |
-| `localizations`              | i18n internal field                           |
 | `password`                   | Private attribute                             |
 | Admin relations (`admin::*`) | Admin panel internals                         |
 | Non-user plugin relations    | Plugin internals (except `users-permissions`) |
+
+::: info i18n Fields
+If your content type has the Strapi i18n plugin enabled, `locale` (string) and `localizations` (self-referencing relation) are **automatically included** in generated types. Content types without i18n are not affected.
+:::
 
 ::: tip
 Any attribute marked as `private` in the Strapi schema is automatically excluded from generated types. The `password` type is the most common example.

@@ -375,6 +375,7 @@ interface QueryParams<TEntity, TFilters, TPopulate, TFields> {
     }
     populate?: TPopulate
     fields?: TFields[]
+    locale?: string
 }
 ```
 
@@ -478,6 +479,29 @@ await strapi.articles.find({
     fields: ['title', 'slug', 'createdAt'],
 })
 ```
+
+### locale
+
+Filter by locale for content types with the Strapi i18n plugin enabled.
+
+```ts
+// Fetch content in a specific locale
+await strapi.articles.find({
+    locale: 'en',
+})
+
+// Combine with populate to get localizations
+await strapi.articles.find({
+    locale: 'en',
+    populate: {
+        localizations: { fields: ['locale', 'slug'] },
+    },
+})
+```
+
+::: info
+The `locale` parameter is available on all content types. Strapi ignores it for content types without i18n enabled.
+:::
 
 ## NextOptions
 
