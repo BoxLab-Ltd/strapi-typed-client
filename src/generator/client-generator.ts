@@ -237,6 +237,11 @@ import qs from 'qs'`
                     type: 'string',
                     hasQuestionToken: true,
                 },
+                {
+                    name: 'status',
+                    type: "'draft' | 'published'",
+                    hasQuestionToken: true,
+                },
             ],
         })
 

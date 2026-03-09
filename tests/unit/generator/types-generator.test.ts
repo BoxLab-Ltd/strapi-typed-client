@@ -209,7 +209,7 @@ describe('TypesGenerator', () => {
 
         it('should generate _ApplyFields helper type', () => {
             expect(output).toContain(
-                "type _ApplyFields<TFull, TBase, TEntry> = TEntry extends true ? TFull : TEntry extends { fields: readonly (infer F)[] } ? F extends string ? Pick<TBase, Extract<F | 'id' | 'documentId', keyof TBase>> & Omit<TFull, keyof TBase> : TFull : TFull",
+                "type _ApplyFields<TFull, TBase, TEntry> = TEntry extends true ? TFull : TEntry extends { fields: readonly (infer F extends string)[] } ? Pick<TBase, Extract<F | 'id' | 'documentId', keyof TBase>> & Omit<TFull, keyof TBase> : TFull",
             )
         })
     })
@@ -437,6 +437,34 @@ describe('TypesGenerator', () => {
                 'export type LandingFeatureGetPayload<P extends { populate?: any } = {}> =',
             )
             expect(output).toContain('LandingFeature &')
+        })
+    })
+
+    // ================================================================
+    // Dynamic zone populate.on support
+    // ================================================================
+    describe('Dynamic zone populate.on support', () => {
+        it('should resolve nested populate from on discriminator for components with populatable fields', () => {
+            // LandingFeature has a relation (item), so it should have nested populate via on
+            expect(output).toContain("Pop['sections'] extends { on: infer On }")
+            expect(output).toContain("'landing.feature' extends keyof On")
+            expect(output).toContain(
+                "On['landing.feature'] extends { populate: infer NestedPop }",
+            )
+            expect(output).toContain(
+                'LandingFeatureGetPayload<{ populate: NestedPop }>',
+            )
+        })
+
+        it('should resolve nested populate from on discriminator for components with media', () => {
+            // LandingHero has media (image), so it should also have nested populate via on
+            expect(output).toContain("'landing.hero' extends keyof On")
+            expect(output).toContain(
+                "On['landing.hero'] extends { populate: infer NestedPop }",
+            )
+            expect(output).toContain(
+                'LandingHeroGetPayload<{ populate: NestedPop }>',
+            )
         })
     })
 })

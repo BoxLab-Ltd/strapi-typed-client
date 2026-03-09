@@ -180,6 +180,9 @@ describe('ClientGenerator', () => {
         it('should generate QueryParams with locale parameter for i18n support', () => {
             expect(output).toContain('locale?: string')
         })
+        it('should generate QueryParams with status parameter for publication state', () => {
+            expect(output).toContain("status?: 'draft' | 'published'")
+        })
         it('should generate NextOptions interface', () => {
             expect(output).toContain('export interface NextOptions')
             expect(output).toContain('revalidate?: number | false')

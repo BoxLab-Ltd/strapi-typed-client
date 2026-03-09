@@ -223,7 +223,7 @@ type _EntityField<T> = Exclude<keyof T & string, '__typename'>
 type _SortValue<T> = _EntityField<T> | \`\${_EntityField<T>}:\${"asc" | "desc"}\`
 
 // Apply fields narrowing from populate entry (e.g. populate: { item: { fields: ["title"] } })
-type _ApplyFields<TFull, TBase, TEntry> = TEntry extends true ? TFull : TEntry extends { fields: readonly (infer F)[] } ? F extends string ? Pick<TBase, Extract<F | 'id' | 'documentId', keyof TBase>> & Omit<TFull, keyof TBase> : TFull : TFull`
+type _ApplyFields<TFull, TBase, TEntry> = TEntry extends true ? TFull : TEntry extends { fields: readonly (infer F extends string)[] } ? Pick<TBase, Extract<F | 'id' | 'documentId', keyof TBase>> & Omit<TFull, keyof TBase> : TFull`
     }
 
     private addComponentInterface(sf: SourceFile, component: Component): void {
@@ -692,8 +692,22 @@ ${perFieldPop}
         }
 
         for (const dzField of type.dynamicZones) {
-            const unionType = dzField.componentTypes.join(' | ')
-            const dzType = `(${unionType})[]`
+            const componentEntries: string[] = []
+            for (let i = 0; i < dzField.components.length; i++) {
+                const uid = dzField.components[i]
+                const cleanType = dzField.componentTypes[i]
+                const hasPopulate = this.hasPopulatableFields(cleanType)
+
+                if (hasPopulate) {
+                    // Extract nested populate from on discriminator and recursively apply GetPayload
+                    componentEntries.push(
+                        `(Pop['${dzField.name}'] extends { on: infer On } ? '${uid}' extends keyof On ? On['${uid}'] extends { populate: infer NestedPop } ? ${cleanType}GetPayload<{ populate: NestedPop }> : ${cleanType} : ${cleanType} : ${cleanType})`,
+                    )
+                } else {
+                    componentEntries.push(cleanType)
+                }
+            }
+            const dzType = `(${componentEntries.join(' | ')})[]`
             fields.push(
                 `          ${dzField.name}?: '${dzField.name}' extends keyof Pop ? ${dzType} : never`,
             )
