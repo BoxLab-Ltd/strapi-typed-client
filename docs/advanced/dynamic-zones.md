@@ -54,15 +54,41 @@ const landing = await strapi.landing.find({
 })
 ```
 
-For nested relations within Dynamic Zone components, use deep populate:
+For nested relations within Dynamic Zone components, use the `on` discriminator to specify per-component populate options:
 
 ```typescript
 const landing = await strapi.landing.find({
     populate: {
         content: {
-            populate: {
-                backgroundImage: true, // populate media inside HeroBlock
-                images: true, // populate media inside GalleryBlock
+            on: {
+                'landing.hero-block': {
+                    populate: { backgroundImage: true },
+                },
+                'landing.gallery-block': {
+                    populate: { images: true },
+                },
+            },
+        },
+    },
+})
+```
+
+The return type is fully inferred — populated relations within each component will include the full type instead of just `{ id, documentId }`.
+
+You can also combine `on` with `fields` to select specific fields per component:
+
+```typescript
+const landing = await strapi.landing.find({
+    populate: {
+        content: {
+            on: {
+                'landing.hero-block': {
+                    fields: ['heading', 'subheading'],
+                    populate: { backgroundImage: true },
+                },
+                'landing.text-block': {
+                    fields: ['body'],
+                },
             },
         },
     },

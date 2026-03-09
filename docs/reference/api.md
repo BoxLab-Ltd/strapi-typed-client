@@ -376,6 +376,7 @@ interface QueryParams<TEntity, TFilters, TPopulate, TFields> {
     populate?: TPopulate
     fields?: TFields[]
     locale?: string
+    status?: 'draft' | 'published'
 }
 ```
 
@@ -501,6 +502,26 @@ await strapi.articles.find({
 
 ::: info
 The `locale` parameter is available on all content types. Strapi ignores it for content types without i18n enabled.
+:::
+
+### status
+
+Filter by publication status. Useful for preview/editor flows where you need to access draft content.
+
+```ts
+// Fetch only draft entries
+await strapi.articles.find({
+    status: 'draft',
+})
+
+// Fetch only published entries (default Strapi behavior)
+await strapi.articles.find({
+    status: 'published',
+})
+```
+
+::: info
+See the [Strapi documentation on status](https://docs.strapi.io/cms/api/rest/status) for more details. By default, Strapi returns only published entries when `status` is omitted.
 :::
 
 ## NextOptions
