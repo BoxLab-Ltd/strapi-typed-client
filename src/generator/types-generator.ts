@@ -240,45 +240,6 @@ type _ApplyFields<TFull, TBase, TEntry> = TEntry extends true ? TFull : TEntry e
                         attr.required,
                     ),
                 })),
-                ...component.media.map(mediaField => {
-                    const mediaType = mediaField.multiple
-                        ? 'MediaFile[]'
-                        : 'MediaFile'
-                    const suffix = mediaField.required ? '' : ' | null'
-                    return {
-                        name: mediaField.name,
-                        type: `${mediaType}${suffix}`,
-                    }
-                }),
-                ...component.relations.map(rel => {
-                    const isArray =
-                        rel.relationType === 'oneToMany' ||
-                        rel.relationType === 'manyToMany'
-                    return {
-                        name: rel.name,
-                        type: isArray
-                            ? '{ id: number; documentId: string }[]'
-                            : '{ id: number; documentId: string } | null',
-                    }
-                }),
-                ...component.components.map(compField => {
-                    const compType = compField.repeatable
-                        ? `${compField.componentType}[]`
-                        : compField.componentType
-                    const suffix = compField.required ? '' : ' | null'
-                    return {
-                        name: compField.name,
-                        type: `${compType}${suffix}`,
-                    }
-                }),
-                ...component.dynamicZones.map(dzField => {
-                    const dzType = `(${dzField.componentTypes.join(' | ')})[]`
-                    const suffix = dzField.required ? '' : ' | null'
-                    return {
-                        name: dzField.name,
-                        type: `${dzType}${suffix}`,
-                    }
-                }),
             ],
         })
     }

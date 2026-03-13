@@ -284,12 +284,13 @@ describe('TypesGenerator', () => {
             expect(output).toContain('  value: string')
         })
 
-        it('should generate LandingHero component with __component and media field', () => {
+        it('should generate LandingHero component with only scalar fields (no media/relations in base)', () => {
             expect(output).toContain('export interface LandingHero {')
             expect(output).toContain('  id: number')
             expect(output).toContain("  __component: 'landing.hero'")
             expect(output).toContain('  title: string')
-            expect(output).toContain('  image: MediaFile')
+            // Media fields are only available via GetPayload populate, not in base interface
+            expect(output).not.toMatch(/interface LandingHero \{[^}]*image/)
         })
     })
 
