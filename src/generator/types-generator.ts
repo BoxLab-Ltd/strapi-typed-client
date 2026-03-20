@@ -75,6 +75,19 @@ export class TypesGenerator {
     private generateBaseTypes(): string {
         return `// Base types
 
+export interface MediaFormat {
+  ext: string
+  url: string
+  hash: string
+  mime: string
+  name: string
+  path: string | null
+  size: number
+  width: number
+  height: number
+  sizeInBytes: number
+}
+
 export interface MediaFile {
   id: number
   name: string
@@ -82,7 +95,7 @@ export interface MediaFile {
   caption: string | null
   width: number | null
   height: number | null
-  formats: unknown
+  formats: Record<string, MediaFormat> | null
   hash: string
   ext: string
   mime: string
@@ -176,7 +189,7 @@ export interface ImageBlock {
     caption?: string | null
     width?: number
     height?: number
-    formats?: unknown
+    formats?: Record<string, MediaFormat> | null
     hash: string
     ext: string
     mime: string
