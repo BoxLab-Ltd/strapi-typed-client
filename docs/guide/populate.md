@@ -133,6 +133,34 @@ function renderArticle(article: ArticleWithCategory) {
 
 This is especially useful when you need to pass fetched data between functions and want to preserve the populated type information.
 
+::: warning Use `as const` when extracting populate to a variable
+If you define your populate object outside the method call, you **must** use `as const`. Without it, TypeScript widens `true` to `boolean` and `GetPayload` cannot infer the populated fields:
+
+```ts
+// ❌ Type inference broken — `true` widens to `boolean`
+const populate = { category: true, tags: true }
+type Result = ArticleGetPayload<{ populate: typeof populate }>
+// Result has no populated fields
+
+// ✅ Correct — `as const` preserves literal types
+const populate = { category: true, tags: true } as const
+type Result = ArticleGetPayload<{ populate: typeof populate }>
+// Result includes full Category and Tag[] fields
+```
+
+This also applies when passing populate to client methods via a variable:
+
+```ts
+const POPULATE = { category: true, author: true } as const
+
+// Type inference works correctly
+const result = await strapi.articles.find({ populate: POPULATE })
+result.data[0].category.name // ✅ fully typed
+```
+
+When you pass the object inline, `as const` is not needed — TypeScript infers literal types automatically.
+:::
+
 ## Populating Media
 
 Media fields work the same way:
