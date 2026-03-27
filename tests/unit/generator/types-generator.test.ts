@@ -249,6 +249,7 @@ describe('TypesGenerator', () => {
             expect(output).toContain('  documentId: string')
             expect(output).toContain('  createdAt: string')
             expect(output).toContain('  updatedAt: string')
+            expect(output).toContain('  publishedAt: string | null')
             expect(output).toContain('  name: string')
         })
 

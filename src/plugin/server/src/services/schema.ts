@@ -35,8 +35,8 @@ export type {
 function filterAttributes(
     attributes: Record<string, StrapiAttribute>,
 ): Record<string, StrapiAttribute> {
-    // Combine system fields (createdAt, updatedAt — added by generator as base fields)
-    // and private fields (createdBy, updatedBy, publishedAt)
+    // Combine system fields (createdAt, updatedAt, publishedAt — added by generator as base fields)
+    // and private fields (createdBy, updatedBy)
     const systemFields: string[] = [
         ...SYSTEM_FIELDS.filter(f => f !== 'id' && f !== 'documentId'),
         ...PRIVATE_FIELDS,

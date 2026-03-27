@@ -285,7 +285,7 @@ function mapStrapiType(attr: StrapiAttribute): AttributeType | null {
         case 'email':
             return { kind: 'email' }
         case 'password':
-            return { kind: 'string' } // passwords are strings but usually hidden
+            return null // passwords are never returned by Strapi API
         case 'uid':
             return { kind: 'string' }
         case 'integer':

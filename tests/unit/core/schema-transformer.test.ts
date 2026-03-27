@@ -449,9 +449,7 @@ describe('Schema Transformer', () => {
             expect(attrs.find(a => a.name === 'emailField')!.type.kind).toBe(
                 'email',
             )
-            expect(attrs.find(a => a.name === 'passwordField')!.type.kind).toBe(
-                'string',
-            )
+            expect(attrs.find(a => a.name === 'passwordField')).toBeUndefined()
             expect(attrs.find(a => a.name === 'uidField')!.type.kind).toBe(
                 'string',
             )

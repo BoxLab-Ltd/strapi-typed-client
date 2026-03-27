@@ -325,6 +325,7 @@ type _ApplyFields<TFull, TBase, TEntry> = TEntry extends true ? TFull : TEntry e
                 { name: 'documentId', type: 'string' },
                 { name: 'createdAt', type: 'string' },
                 { name: 'updatedAt', type: 'string' },
+                { name: 'publishedAt', type: 'string | null' },
                 ...contentType.attributes.map(attr => ({
                     name: attr.name,
                     type: this.transformer.toTypeScript(
