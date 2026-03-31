@@ -224,6 +224,7 @@ describe('TypesGenerator', () => {
             expect(output).toContain('  name: string')
             expect(output).toContain('  url: string')
             expect(output).toContain('  mime: string')
+            expect(output).toContain('  focalPoint: { x: number; y: number } | null')
             expect(output).toContain('  width: number | null')
             expect(output).toContain('  height: number | null')
             expect(output).toContain('  alternativeText: string | null')
