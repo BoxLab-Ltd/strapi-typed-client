@@ -93,6 +93,7 @@ export interface MediaFile {
   name: string
   alternativeText: string | null
   caption: string | null
+  focalPoint: { x: number; y: number } | null
   width: number | null
   height: number | null
   formats: Record<string, MediaFormat> | null
