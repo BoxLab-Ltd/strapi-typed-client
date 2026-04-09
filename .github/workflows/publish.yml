@@ -22,9 +22,6 @@ jobs:
           node-version: 22
           cache: yarn
 
-      - name: Install npm 11.5+
-        run: npm install -g npm@latest
-
       - name: Install dependencies
         run: yarn install --frozen-lockfile
 
