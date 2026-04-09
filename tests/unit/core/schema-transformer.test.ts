@@ -48,6 +48,8 @@ describe('Schema Transformer', () => {
             expect(result.contentTypes[0].cleanName).toBe('Item')
             expect(result.contentTypes[0].kind).toBe('collection')
             expect(result.contentTypes[0].collectionName).toBe('items')
+            expect(result.contentTypes[0].singularName).toBe('item')
+            expect(result.contentTypes[0].pluralName).toBe('items')
             expect(result.contentTypes[0].attributes).toHaveLength(3)
 
             // Check attribute transformation

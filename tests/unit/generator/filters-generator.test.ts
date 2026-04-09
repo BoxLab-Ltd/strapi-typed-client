@@ -50,6 +50,8 @@ describe('filters-generator', () => {
             cleanName: 'Item',
             kind: 'collection',
             collectionName: 'items',
+            singularName: 'item',
+            pluralName: 'items',
             attributes: [
                 { name: 'title', type: { kind: 'string' }, required: true },
                 { name: 'price', type: { kind: 'integer' }, required: false },

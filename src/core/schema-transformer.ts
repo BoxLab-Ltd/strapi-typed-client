@@ -112,6 +112,8 @@ function transformContentType(uid: string, ct: StrapiContentType): ContentType {
         name: uidToInterfaceName(uid),
         cleanName,
         collectionName: ct.collectionName,
+        singularName: ct.info.singularName,
+        pluralName: ct.info.pluralName,
         kind,
         pluginName,
         attributes,

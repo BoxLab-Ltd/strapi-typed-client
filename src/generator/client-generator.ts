@@ -1,6 +1,5 @@
 import { Project, SourceFile } from 'ts-morph'
 import { ParsedSchema, ContentType } from '../schema-types.js'
-import { TypeTransformer } from '../transformer/index.js'
 import { AuthApiGenerator } from './auth-api-generator.js'
 import type { ParsedRoutes } from '../shared/route-types.js'
 import { CustomApiGenerator } from './custom-api-generator.js'
@@ -15,12 +14,10 @@ import {
 } from '../core/endpoint-converter.js'
 
 export class ClientGenerator {
-    private transformer: TypeTransformer
     private authApiGenerator: AuthApiGenerator
     private customApiGenerator: CustomApiGenerator
 
     constructor() {
-        this.transformer = new TypeTransformer()
         this.authApiGenerator = new AuthApiGenerator()
         this.customApiGenerator = new CustomApiGenerator()
     }
@@ -863,12 +860,9 @@ class SingleTypeAPI<
                 continue
             }
 
-            // Find the corresponding content type
+            // Find the corresponding content type by Strapi's singularName (= controller name)
             const contentType = schema.contentTypes.find(
-                ct =>
-                    this.transformer
-                        .toEndpointName(ct.cleanName, false)
-                        .replace(/s$/, '') === controller,
+                ct => ct.singularName === controller,
             )
 
             if (contentType) {
@@ -936,11 +930,11 @@ ${customMethods}
         // Build property declarations
         const propertyDeclarations = schema.contentTypes
             .map(contentType => {
-                const endpoint = this.transformer.toEndpointName(
-                    contentType.cleanName,
-                    contentType.kind === 'single',
-                )
-                const controllerName = endpoint.replace(/s$/, '')
+                const endpoint =
+                    contentType.kind === 'single'
+                        ? contentType.singularName
+                        : contentType.pluralName
+                const controllerName = contentType.singularName
                 const hasCustomRoutes =
                     parsedRoutes?.byController.has(controllerName) &&
                     controllerName !== 'auth' &&
@@ -967,11 +961,11 @@ ${customMethods}
         // Build constructor initializations
         const propertyInits = schema.contentTypes
             .map(contentType => {
-                const endpoint = this.transformer.toEndpointName(
-                    contentType.cleanName,
-                    contentType.kind === 'single',
-                )
-                const controllerName = endpoint.replace(/s$/, '')
+                const endpoint =
+                    contentType.kind === 'single'
+                        ? contentType.singularName
+                        : contentType.pluralName
+                const controllerName = contentType.singularName
                 const hasCustomRoutes =
                     parsedRoutes?.byController.has(controllerName) &&
                     controllerName !== 'auth' &&
@@ -1090,10 +1084,7 @@ ${standaloneInits}
             if (controller === 'auth' || controller === 'user') continue
 
             const hasContentType = schema.contentTypes.some(
-                ct =>
-                    this.transformer
-                        .toEndpointName(ct.cleanName, false)
-                        .replace(/s$/, '') === controller,
+                ct => ct.singularName === controller,
             )
 
             if (!hasContentType) {
@@ -1117,10 +1108,7 @@ ${standaloneInits}
             if (controller === 'auth' || controller === 'user') continue
 
             const hasContentType = schema.contentTypes.some(
-                ct =>
-                    this.transformer
-                        .toEndpointName(ct.cleanName, false)
-                        .replace(/s$/, '') === controller,
+                ct => ct.singularName === controller,
             )
 
             if (!hasContentType) {

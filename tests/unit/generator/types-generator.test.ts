@@ -66,6 +66,8 @@ const mockContentTypes: ContentType[] = [
         name: 'ApiCategoryCategory',
         cleanName: 'Category',
         collectionName: 'categories',
+        singularName: 'category',
+        pluralName: 'categories',
         kind: 'collection',
         attributes: [
             { name: 'name', type: { kind: 'string' }, required: true },
@@ -79,6 +81,8 @@ const mockContentTypes: ContentType[] = [
         name: 'ApiItemItem',
         cleanName: 'Item',
         collectionName: 'items',
+        singularName: 'item',
+        pluralName: 'items',
         kind: 'collection',
         attributes: [
             { name: 'title', type: { kind: 'string' }, required: true },
@@ -101,6 +105,8 @@ const mockContentTypes: ContentType[] = [
         name: 'ApiProjectProject',
         cleanName: 'Project',
         collectionName: 'projects',
+        singularName: 'project',
+        pluralName: 'projects',
         kind: 'collection',
         attributes: [
             { name: 'title', type: { kind: 'string' }, required: true },
@@ -144,6 +150,8 @@ const mockContentTypes: ContentType[] = [
         name: 'PluginUsersPermissionsUser',
         cleanName: 'User',
         collectionName: 'up_users',
+        singularName: 'user',
+        pluralName: 'users',
         kind: 'collection',
         attributes: [
             { name: 'email', type: { kind: 'string' }, required: true },
@@ -166,6 +174,8 @@ const mockContentTypes: ContentType[] = [
         name: 'ApiHomepageHomepage',
         cleanName: 'Homepage',
         collectionName: 'homepages',
+        singularName: 'homepage',
+        pluralName: 'homepages',
         kind: 'single',
         attributes: [
             { name: 'heading', type: { kind: 'string' }, required: true },
@@ -224,7 +234,9 @@ describe('TypesGenerator', () => {
             expect(output).toContain('  name: string')
             expect(output).toContain('  url: string')
             expect(output).toContain('  mime: string')
-            expect(output).toContain('  focalPoint: { x: number; y: number } | null')
+            expect(output).toContain(
+                '  focalPoint: { x: number; y: number } | null',
+            )
             expect(output).toContain('  width: number | null')
             expect(output).toContain('  height: number | null')
             expect(output).toContain('  alternativeText: string | null')
@@ -236,6 +248,30 @@ describe('TypesGenerator', () => {
             expect(output).toContain('ParagraphBlock')
             expect(output).toContain('HeadingBlock')
             expect(output).toContain('ImageBlock')
+        })
+
+        it('should generate StrapiID helper type for documentId/id-accepting inputs', () => {
+            expect(output).toContain('export type StrapiID = string | number')
+        })
+
+        it('should generate RelationOperations interface with connect/disconnect/set', () => {
+            expect(output).toContain('export interface RelationOperations {')
+            expect(output).toContain('connect?:')
+            expect(output).toContain('disconnect?: StrapiID[]')
+            expect(output).toContain('set?: StrapiID[]')
+        })
+
+        it('should generate RelationInput union with scalar, array, and operations forms', () => {
+            expect(output).toContain(
+                'export type RelationInput = StrapiID | StrapiID[] | RelationOperations | null',
+            )
+        })
+
+        it('should generate MediaInput and MultiMediaInput aliases', () => {
+            expect(output).toContain('export type MediaInput = StrapiID | null')
+            expect(output).toContain(
+                'export type MultiMediaInput = StrapiID[] | null',
+            )
         })
     })
 
@@ -305,12 +341,19 @@ describe('TypesGenerator', () => {
             expect(output).toContain('  name?: string')
         })
 
-        it('should generate ItemInput with media as number | null and relation as number | null', () => {
+        it('should generate ItemInput with media as MediaInput and relation as RelationInput', () => {
             expect(output).toContain('export interface ItemInput {')
             expect(output).toContain('  title?: string')
             expect(output).toContain('  price?: number')
-            expect(output).toContain('  image?: number | null')
-            expect(output).toContain('  category?: number | null')
+            expect(output).toContain('  image?: MediaInput')
+            expect(output).toContain('  category?: RelationInput')
+        })
+
+        it('should generate ProjectInput with multi-media as MultiMediaInput and oneToMany as RelationInput', () => {
+            expect(output).toContain('export interface ProjectInput {')
+            expect(output).toContain('  images?: MultiMediaInput')
+            expect(output).toContain('  items?: RelationInput')
+            expect(output).toContain('  owner?: RelationInput')
         })
 
         it('should generate ProjectConfigInput for component with __component', () => {

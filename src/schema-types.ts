@@ -9,6 +9,8 @@ export interface ContentType {
     name: string // e.g., "ApiItemItem"
     cleanName: string // e.g., "Item"
     collectionName: string
+    singularName: string // Strapi info.singularName, used as controller/endpoint for single types
+    pluralName: string // Strapi info.pluralName, used as collection endpoint
     kind: 'collection' | 'single'
     pluginName?: string // e.g., 'users-permissions' for plugin content types
     attributes: Attribute[] // Scalar fields only (no relations, media, or components)

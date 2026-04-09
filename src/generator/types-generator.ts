@@ -75,6 +75,40 @@ export class TypesGenerator {
     private generateBaseTypes(): string {
         return `// Base types
 
+/**
+ * Scalar identifier accepted by the Strapi v5 REST API for relations and media.
+ * Strings are treated as documentId; numbers fall back to the legacy numeric id.
+ */
+export type StrapiID = string | number
+
+/**
+ * Explicit relation operations supported by Strapi v5.
+ * See: https://docs.strapi.io/cms/api/rest/relations
+ */
+export interface RelationOperations {
+  connect?: StrapiID[] | { documentId: string; position?: { before?: StrapiID; after?: StrapiID; start?: true; end?: true } }[]
+  disconnect?: StrapiID[]
+  set?: StrapiID[]
+}
+
+/**
+ * Input value for a relation field in create/update payloads.
+ * Accepts a single id, an array of ids, or the explicit { connect | disconnect | set } form.
+ * Passing a plain id or array is equivalent to 'set' — it overwrites existing relations.
+ */
+export type RelationInput = StrapiID | StrapiID[] | RelationOperations | null
+
+/**
+ * Input value for a single media file field. Accepts a documentId (string) or
+ * legacy numeric id.
+ */
+export type MediaInput = StrapiID | null
+
+/**
+ * Input value for a multi-media field. Accepts an array of ids.
+ */
+export type MultiMediaInput = StrapiID[] | null
+
 export interface MediaFormat {
   ext: string
   url: string
@@ -276,19 +310,16 @@ type _ApplyFields<TFull, TBase, TEntry> = TEntry extends true ? TFull : TEntry e
                 })),
                 ...component.media.map(mediaField => ({
                     name: mediaField.name,
-                    type: `${mediaField.multiple ? 'number[]' : 'number'} | null`,
+                    type: mediaField.multiple
+                        ? 'MultiMediaInput'
+                        : 'MediaInput',
                     hasQuestionToken: true,
                 })),
-                ...component.relations.map(rel => {
-                    const isArray =
-                        rel.relationType === 'oneToMany' ||
-                        rel.relationType === 'manyToMany'
-                    return {
-                        name: rel.name,
-                        type: `${isArray ? 'number[]' : 'number'} | null`,
-                        hasQuestionToken: true,
-                    }
-                }),
+                ...component.relations.map(rel => ({
+                    name: rel.name,
+                    type: 'RelationInput',
+                    hasQuestionToken: true,
+                })),
                 ...component.components.map(compField => {
                     const compType = compField.repeatable
                         ? `${compField.componentType}Input[]`
@@ -354,19 +385,16 @@ type _ApplyFields<TFull, TBase, TEntry> = TEntry extends true ? TFull : TEntry e
                 })),
                 ...contentType.media.map(mediaField => ({
                     name: mediaField.name,
-                    type: `${mediaField.multiple ? 'number[]' : 'number'} | null`,
+                    type: mediaField.multiple
+                        ? 'MultiMediaInput'
+                        : 'MediaInput',
                     hasQuestionToken: true,
                 })),
-                ...contentType.relations.map(rel => {
-                    const isArray =
-                        rel.relationType === 'oneToMany' ||
-                        rel.relationType === 'manyToMany'
-                    return {
-                        name: rel.name,
-                        type: `${isArray ? 'number[]' : 'number'} | null`,
-                        hasQuestionToken: true,
-                    }
-                }),
+                ...contentType.relations.map(rel => ({
+                    name: rel.name,
+                    type: 'RelationInput',
+                    hasQuestionToken: true,
+                })),
                 ...contentType.components.map(compField => {
                     const compType = compField.repeatable
                         ? `${compField.componentType}Input[]`

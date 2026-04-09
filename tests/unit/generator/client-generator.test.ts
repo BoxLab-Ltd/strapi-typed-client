@@ -8,6 +8,8 @@ const mockSchema: ParsedSchema = {
             name: 'ApiItemItem',
             cleanName: 'Item',
             collectionName: 'items',
+            singularName: 'item',
+            pluralName: 'items',
             kind: 'collection',
             attributes: [
                 { name: 'title', type: { kind: 'string' }, required: true },
@@ -30,6 +32,8 @@ const mockSchema: ParsedSchema = {
             name: 'ApiCategoryCategory',
             cleanName: 'Category',
             collectionName: 'categories',
+            singularName: 'category',
+            pluralName: 'categories',
             kind: 'collection',
             attributes: [
                 { name: 'name', type: { kind: 'string' }, required: true },
@@ -43,6 +47,8 @@ const mockSchema: ParsedSchema = {
             name: 'PluginUsersPermissionsUser',
             cleanName: 'User',
             collectionName: 'up_users',
+            singularName: 'user',
+            pluralName: 'users',
             kind: 'collection',
             attributes: [
                 { name: 'email', type: { kind: 'string' }, required: true },
@@ -57,6 +63,8 @@ const mockSchema: ParsedSchema = {
             name: 'ApiHomepageHomepage',
             cleanName: 'Homepage',
             collectionName: 'homepages',
+            singularName: 'homepage',
+            pluralName: 'homepages',
             kind: 'single',
             attributes: [
                 { name: 'heading', type: { kind: 'string' }, required: true },
@@ -447,6 +455,43 @@ describe('ClientGenerator', () => {
             expect(output).toContain('async validateSchema()')
             expect(output).toContain('SCHEMA_HASH')
             expect(output).toContain('schema-hash')
+        })
+
+        it('should use pluralName as the property name and endpoint URL', () => {
+            const schema: ParsedSchema = {
+                contentTypes: [
+                    {
+                        name: 'ApiCampusCampus',
+                        cleanName: 'Campus',
+                        collectionName: 'campuses',
+                        singularName: 'campus',
+                        pluralName: 'campus',
+                        kind: 'collection',
+                        attributes: [
+                            {
+                                name: 'name',
+                                type: { kind: 'string' },
+                                required: true,
+                            },
+                        ],
+                        relations: [],
+                        media: [],
+                        components: [],
+                        dynamicZones: [],
+                    },
+                ],
+                components: [],
+            }
+            const result = new ClientGenerator().generate(schema)
+
+            expect(result).toContain(
+                'campus: CollectionAPI<Campus, CampusInput, CampusFilters>',
+            )
+            expect(result).toContain(
+                "this.campus = new CollectionAPI('campus', this.config)",
+            )
+            expect(result).not.toContain('campuses:')
+            expect(result).not.toContain("'campuses'")
         })
     })
 
