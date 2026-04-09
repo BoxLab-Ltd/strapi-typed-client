@@ -240,6 +240,20 @@ describe('TypesGenerator', () => {
             expect(output).toContain('  width: number | null')
             expect(output).toContain('  height: number | null')
             expect(output).toContain('  alternativeText: string | null')
+            expect(output).toContain('  formats: BaseMediaFormats | null')
+        })
+
+        it('should generate BaseMediaFormats interface with default responsive keys and open index signature', () => {
+            expect(output).toContain('export interface BaseMediaFormats {')
+            expect(output).toContain('  thumbnail?: MediaFormat')
+            expect(output).toContain('  small?: MediaFormat')
+            expect(output).toContain('  medium?: MediaFormat')
+            expect(output).toContain('  large?: MediaFormat')
+            expect(output).toContain('  [key: string]: MediaFormat | undefined')
+        })
+
+        it('should type ImageBlock.image.formats as BaseMediaFormats', () => {
+            expect(output).toContain('formats?: BaseMediaFormats | null')
         })
 
         it('should generate BlocksContent type', () => {

@@ -122,6 +122,14 @@ export interface MediaFormat {
   sizeInBytes: number
 }
 
+export interface BaseMediaFormats {
+  thumbnail?: MediaFormat
+  small?: MediaFormat
+  medium?: MediaFormat
+  large?: MediaFormat
+  [key: string]: MediaFormat | undefined
+}
+
 export interface MediaFile {
   id: number
   name: string
@@ -130,7 +138,7 @@ export interface MediaFile {
   focalPoint: { x: number; y: number } | null
   width: number | null
   height: number | null
-  formats: Record<string, MediaFormat> | null
+  formats: BaseMediaFormats | null
   hash: string
   ext: string
   mime: string
@@ -224,7 +232,7 @@ export interface ImageBlock {
     caption?: string | null
     width?: number
     height?: number
-    formats?: Record<string, MediaFormat> | null
+    formats?: BaseMediaFormats | null
     hash: string
     ext: string
     mime: string
