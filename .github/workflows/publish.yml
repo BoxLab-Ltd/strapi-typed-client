@@ -29,6 +29,6 @@ jobs:
         run: yarn build
 
       - name: Publish
-        run: npm publish --provenance --access public
+        run: npx -y npm@latest publish --provenance --access public
         env:
           NODE_AUTH_TOKEN: ""
