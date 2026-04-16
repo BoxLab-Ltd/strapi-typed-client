@@ -204,12 +204,12 @@ export interface CodeBlock {
 }
 
 /**
- * List block - ordered or unordered
+ * List block - ordered or unordered (supports nesting)
  */
 export interface ListBlock {
   type: 'list'
   format: 'ordered' | 'unordered'
-  children: ListItemBlock[]
+  children: (ListItemBlock | ListBlock)[]
 }
 
 /**
@@ -221,7 +221,7 @@ export interface ListItemBlock {
 }
 
 /**
- * Image block - embedded image with optional caption
+ * Image block - embedded image
  */
 export interface ImageBlock {
   type: 'image'
@@ -230,19 +230,20 @@ export interface ImageBlock {
     alternativeText?: string | null
     url: string
     caption?: string | null
-    width?: number
-    height?: number
-    formats?: BaseMediaFormats | null
+    width: number
+    height: number
+    formats?: BaseMediaFormats
     hash: string
     ext: string
     mime: string
     size: number
     previewUrl?: string | null
     provider: string
+    provider_metadata?: unknown | null
     createdAt: string
     updatedAt: string
   }
-  children: InlineNode[]
+  children: [{ type: 'text'; text: '' }]
 }
 
 /**

@@ -253,7 +253,7 @@ describe('TypesGenerator', () => {
         })
 
         it('should type ImageBlock.image.formats as BaseMediaFormats', () => {
-            expect(output).toContain('formats?: BaseMediaFormats | null')
+            expect(output).toContain('formats?: BaseMediaFormats')
         })
 
         it('should generate BlocksContent type', () => {
