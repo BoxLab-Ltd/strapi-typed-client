@@ -102,7 +102,7 @@
     "author": "BoxLab Ltd",
     "license": "MIT",
     "dependencies": {
-        "commander": "^12.0.0",
+        "commander": "^14.0.3",
         "ts-morph": "^27.0.2"
     },
     "devDependencies": {
