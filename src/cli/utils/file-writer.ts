@@ -77,30 +77,6 @@ export function writeFiles(
 }
 
 /**
- * Get the schema metadata file path
- */
-export function getSchemaMetaPath(outputDir: string): string {
-    return path.join(outputDir, 'schema-meta.ts')
-}
-
-/**
- * Generate schema metadata file content
- */
-export function generateSchemaMetaContent(
-    hash: string,
-    generatedAt: string,
-): string {
-    return `/**
- * Schema metadata - auto-generated, do not edit
- * Generated at: ${generatedAt}
- */
-
-export const SCHEMA_HASH = '${hash}'
-export const GENERATED_AT = '${generatedAt}'
-`
-}
-
-/**
  * Resolve default output directory: package dist/ in node_modules.
  * Falls back to ./dist when the package can't be resolved (e.g. local dev).
  */
@@ -116,17 +92,47 @@ export function getDefaultOutputDir(): string {
     }
 }
 
+const SCHEMA_HASH_HEAD_BYTES = 300
+
 /**
- * Read schema hash from existing schema-meta.ts
+ * Read the first N bytes of a file without loading the whole thing.
+ * SCHEMA_HASH is emitted at the top of client.ts/client.js so this is enough.
+ */
+function readFileHead(filePath: string, bytes: number): string | null {
+    let fd: number | undefined
+    try {
+        fd = fs.openSync(filePath, 'r')
+        const buf = Buffer.alloc(bytes)
+        const read = fs.readSync(fd, buf, 0, bytes, 0)
+        return buf.slice(0, read).toString('utf-8')
+    } catch {
+        return null
+    } finally {
+        if (fd !== undefined) {
+            try {
+                fs.closeSync(fd)
+            } catch {
+                /* ignore */
+            }
+        }
+    }
+}
+
+/**
+ * Read schema hash from the generated client. Tries client.ts (raw, .ts mode)
+ * first, then client.js (compiled, .js mode). SCHEMA_HASH is baked into the
+ * client at generation time as the first export — reading the file head is
+ * enough and avoids parsing the full client.
  */
 export function readLocalSchemaHash(outputDir: string): string | null {
-    const metaPath = getSchemaMetaPath(outputDir)
-    const content = readFile(metaPath)
-
-    if (!content) {
-        return null
+    for (const file of ['client.ts', 'client.js']) {
+        const head = readFileHead(
+            path.join(outputDir, file),
+            SCHEMA_HASH_HEAD_BYTES,
+        )
+        if (!head) continue
+        const match = head.match(/SCHEMA_HASH\s*=\s*['"]([^'"]+)['"]/)
+        if (match) return match[1]
     }
-
-    const match = content.match(/SCHEMA_HASH\s*=\s*['"]([^'"]+)['"]/)
-    return match ? match[1] : null
+    return null
 }

@@ -1,6 +1,8 @@
 export class IndexGenerator {
     generate(): string {
-        return `// Auto-generated index file
+        return `/* eslint-disable */
+// @ts-nocheck
+// Auto-generated index file
 // Do not edit manually
 
 export * from './types.js'

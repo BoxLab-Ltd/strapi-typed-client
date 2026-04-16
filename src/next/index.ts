@@ -16,6 +16,8 @@ export interface StrapiTypesConfig {
     strapiUrl?: string
     token?: string
     silent?: boolean
+    format?: 'js' | 'ts'
+    output?: string
 }
 
 const _require = createRequire(import.meta.url)
@@ -25,30 +27,53 @@ function getPackageDir(): string {
     return path.dirname(pkgJsonPath)
 }
 
-function getOutputDir(): string {
+function defaultOutputDir(): string {
     return path.join(getPackageDir(), 'dist')
 }
 
-/**
- * Read schema hash from schema-meta.ts written by the generate command.
- * Single source of truth — no separate cache file.
- */
-function readLocalHash(): string | null {
-    try {
-        const metaPath = path.join(getOutputDir(), 'schema-meta.ts')
-        const content = fs.readFileSync(metaPath, 'utf-8')
-        const match = content.match(/SCHEMA_HASH\s*=\s*['"]([^'"]+)['"]/)
-        return match ? match[1] : null
-    } catch {
-        return null
-    }
+function resolveOutputDir(config: StrapiTypesConfig): string {
+    return config.output
+        ? path.resolve(process.cwd(), config.output)
+        : defaultOutputDir()
 }
 
-function generatedFilesExist(): boolean {
-    const outputDir = getOutputDir()
-    return ['types.d.ts', 'client.d.ts', 'index.d.ts'].every(f =>
-        fs.existsSync(path.join(outputDir, f)),
-    )
+/**
+ * Read schema hash baked at the top of the generated client. Slices the
+ * first few hundred bytes so we don't load the full client just to compare
+ * hashes. Tries client.ts (raw, .ts mode) then client.js (compiled, .js mode).
+ */
+function readLocalHash(outputDir: string): string | null {
+    for (const file of ['client.ts', 'client.js']) {
+        const p = path.join(outputDir, file)
+        let fd: number | undefined
+        try {
+            fd = fs.openSync(p, 'r')
+            const buf = Buffer.alloc(300)
+            const read = fs.readSync(fd, buf, 0, 300, 0)
+            const head = buf.slice(0, read).toString('utf-8')
+            const match = head.match(/SCHEMA_HASH\s*=\s*['"]([^'"]+)['"]/)
+            if (match) return match[1]
+        } catch {
+            /* try next candidate */
+        } finally {
+            if (fd !== undefined) {
+                try {
+                    fs.closeSync(fd)
+                } catch {
+                    /* ignore */
+                }
+            }
+        }
+    }
+    return null
+}
+
+function generatedFilesExist(outputDir: string, format: 'js' | 'ts'): boolean {
+    const files =
+        format === 'ts'
+            ? ['types.ts', 'client.ts', 'index.ts']
+            : ['types.d.ts', 'client.d.ts', 'index.d.ts']
+    return files.every(f => fs.existsSync(path.join(outputDir, f)))
 }
 
 // ANSI colors matching Next.js output
@@ -84,7 +109,8 @@ function loading(silent: boolean, msg: string): () => void {
 }
 
 async function startDevWatch(config: StrapiTypesConfig): Promise<void> {
-    const outputDir = getOutputDir()
+    const outputDir = resolveOutputDir(config)
+    const format: 'js' | 'ts' = config.format ?? 'js'
     const silent = config.silent ?? false
     const url =
         config.strapiUrl || process.env.STRAPI_URL || 'http://localhost:1337'
@@ -96,7 +122,9 @@ async function startDevWatch(config: StrapiTypesConfig): Promise<void> {
 
     const client = createApiClient({ url, token })
 
-    let lastHash = generatedFilesExist() ? readLocalHash() : null
+    let lastHash = generatedFilesExist(outputDir, format)
+        ? readLocalHash(outputDir)
+        : null
     let generating = false
 
     info(silent, `Watching for schema changes ${dim('(SSE)')}`)
@@ -110,7 +138,10 @@ async function startDevWatch(config: StrapiTypesConfig): Promise<void> {
             try {
                 const { hash: remoteHash } = JSON.parse(data)
 
-                if (lastHash !== remoteHash || !generatedFilesExist()) {
+                if (
+                    lastHash !== remoteHash ||
+                    !generatedFilesExist(outputDir, format)
+                ) {
                     generating = true
                     const stop = loading(silent, 'Regenerating types')
 
@@ -121,6 +152,7 @@ async function startDevWatch(config: StrapiTypesConfig): Promise<void> {
                         output: outputDir,
                         silent: true,
                         force: true,
+                        format,
                     })
 
                     stop()
@@ -158,7 +190,8 @@ function runBuildGenerate(config: StrapiTypesConfig): void {
     const url =
         config.strapiUrl || process.env.STRAPI_URL || 'http://localhost:1337'
     const token = config.token || process.env.STRAPI_TOKEN
-    const outputDir = getOutputDir()
+    const outputDir = resolveOutputDir(config)
+    const format: 'js' | 'ts' = config.format ?? 'js'
     const binPath = path.join(getPackageDir(), 'dist', 'cli', 'index.js')
 
     const args = [
@@ -170,6 +203,8 @@ function runBuildGenerate(config: StrapiTypesConfig): void {
         outputDir,
         '--url',
         url,
+        '--format',
+        format,
     ]
 
     if (token) {

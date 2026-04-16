@@ -10,6 +10,7 @@
     },
     "files": [
         "dist",
+        "src/generator/templates/**/*.ts",
         "strapi-server.js",
         "strapi-admin.js"
     ],

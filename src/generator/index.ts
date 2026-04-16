@@ -27,6 +27,8 @@ export class Generator {
         schema: ParsedSchema,
         endpoints?: ParsedEndpoint[],
         extraTypes?: ExtraControllerType[],
+        schemaHash: string = '',
+        format: 'js' | 'ts' = 'js',
     ): Promise<void> {
         // Ensure output directory exists
         if (!fs.existsSync(this.outputDir)) {
@@ -39,6 +41,7 @@ export class Generator {
             schema,
             endpoints,
             extraTypes,
+            schemaHash,
         )
         const indexContent = this.indexGenerator.generate()
 
@@ -47,6 +50,21 @@ export class Generator {
             'types.ts': await this.formatContent(typesContent),
             'client.ts': await this.formatContent(clientContent),
             'index.ts': await this.formatContent(indexContent),
+        }
+
+        if (format === 'ts') {
+            // Write raw TypeScript for consumers that compile sources
+            // themselves (monorepos). tsc in the consumer project resolves
+            // the .js-extension imports back to .ts source under
+            // moduleResolution: "bundler" | "nodenext" | "node16".
+            for (const [fileName, data] of Object.entries(files)) {
+                fs.writeFileSync(
+                    path.join(this.outputDir, fileName),
+                    data,
+                    'utf-8',
+                )
+            }
+            return
         }
 
         // Compile all files together so cross-file imports resolve correctly

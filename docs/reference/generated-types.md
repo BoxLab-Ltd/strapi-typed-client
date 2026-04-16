@@ -6,23 +6,21 @@ This page explains the structure of the TypeScript files produced by the `strapi
 
 By default, generated files are written to `./dist`. You can change this with the `--output` flag.
 
-| File             | Description                                                                                             |
-| ---------------- | ------------------------------------------------------------------------------------------------------- |
-| `types.d.ts`     | All TypeScript interfaces: base types, input types, payload types, components, filters, populate params |
-| `client.js`      | The `StrapiClient` class with typed methods for every content type                                      |
-| `client.d.ts`    | Type declarations for the client                                                                        |
-| `index.js`       | Re-exports everything from `types` and `client`                                                         |
-| `index.d.ts`     | Type declarations for the index                                                                         |
-| `schema-meta.ts` | Schema hash for change detection                                                                        |
+| File          | Description                                                                                             |
+| ------------- | ------------------------------------------------------------------------------------------------------- |
+| `types.d.ts`  | All TypeScript interfaces: base types, input types, payload types, components, filters, populate params |
+| `client.js`   | The `StrapiClient` class with typed methods for every content type (also exports `SCHEMA_HASH`)         |
+| `client.d.ts` | Type declarations for the client                                                                        |
+| `index.js`    | Re-exports everything from `types` and `client`                                                         |
+| `index.d.ts`  | Type declarations for the index                                                                         |
 
 ```
 dist/
   types.d.ts        # Type definitions
-  client.js         # Runtime client code
+  client.js         # Runtime client code + SCHEMA_HASH constant
   client.d.ts       # Client type declarations
   index.js          # Re-export barrel
   index.d.ts        # Index type declarations
-  schema-meta.ts    # Schema hash constant
 ```
 
 ## Type Categories

@@ -38,7 +38,7 @@ export async function check(options: CheckOptions): Promise<CheckResult> {
                 inSync: false,
                 localHash: null,
                 remoteHash: null,
-                error: `No schema-meta.ts found in ${outputDir}. Run 'strapi-types generate' first.`,
+                error: `No generated client found in ${outputDir}. Run 'strapi-types generate' first.`,
             }
         }
 
