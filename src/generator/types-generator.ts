@@ -554,7 +554,7 @@ type _ApplyFields<TFull, TBase, TEntry> = TEntry extends true ? TFull : TEntry e
         const perFieldPop = this.buildPerFieldPopulate(type)
 
         return `// Payload type for ${name} with populate support
-export type ${name}GetPayload<P extends { populate?: any } = {}> =
+export type ${name}GetPayload<P extends { populate?: ${name}PopulateParam | (keyof ${name}PopulateParam & string)[] | '*' | true } = {}> =
   ${name} &
   (P extends { populate: infer Pop }
     ? Pop extends '*' | true
