@@ -12,6 +12,7 @@ import {
     convertEndpointsToRoutes,
     convertEndpointsToCustomTypes,
 } from '../core/endpoint-converter.js'
+import { stringifyQuery, appendEntry } from './templates/stringify-query.js'
 
 export class ClientGenerator {
     private authApiGenerator: AuthApiGenerator
@@ -157,8 +158,7 @@ export class ClientGenerator {
         )
 
         return `import type { ${imports.join(', ')} } from './types.js'
-import type { ${filterImports.join(', ')} } from './types.js'
-import qs from 'qs'`
+import type { ${filterImports.join(', ')} } from './types.js'`
     }
 
     private addUtilityTypes(sf: SourceFile, schema: ParsedSchema): void {
@@ -594,15 +594,14 @@ class BaseAPI {
 
   protected buildQueryString(params?: QueryParams): string {
     if (!params) return ''
-
-    const queryString = qs.stringify(params, {
-      encodeValuesOnly: true,
-      skipNulls: true,
-    })
-
-    return queryString ? \`?\${queryString}\` : ''
+    const query = stringifyQuery(params)
+    return query ? \`?\${query}\` : ''
   }
-}`
+}
+
+${stringifyQuery.toString()}
+
+${appendEntry.toString()}`
     }
 
     private addGetPopulatedType(sf: SourceFile, schema: ParsedSchema): void {

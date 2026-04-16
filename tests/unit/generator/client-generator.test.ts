@@ -117,9 +117,6 @@ describe('ClientGenerator', () => {
         it('should import MediaFile', () => {
             expect(output).toContain('MediaFile')
         })
-        it('should import qs', () => {
-            expect(output).toContain("import qs from 'qs'")
-        })
     })
 
     describe('Utility types', () => {
