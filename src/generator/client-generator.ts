@@ -4,7 +4,7 @@ import { createRequire } from 'module'
 import { Project, SourceFile } from 'ts-morph'
 import { ParsedSchema, ContentType } from '../schema-types.js'
 import { AuthApiGenerator } from './auth-api-generator.js'
-import type { ParsedRoutes } from '../shared/route-types.js'
+import type { ParsedRoute, ParsedRoutes } from '../shared/route-types.js'
 import { CustomApiGenerator } from './custom-api-generator.js'
 import { toCamelCase, toPascalCase } from '../shared/index.js'
 import type {
@@ -914,7 +914,11 @@ ${customMethods}
                 )
             } else {
                 // Standalone API class (no content type)
-                const className = toPascalCase(controller) + 'API'
+                const { className } = this.resolveStandaloneNames(
+                    controller,
+                    routes,
+                    schema,
+                )
                 const customMethods =
                     this.customApiGenerator.generateCustomMethods(
                         controller,
@@ -1099,6 +1103,42 @@ ${standaloneInits}
 }`
     }
 
+    /**
+     * Resolve the class + property name for a standalone controller (one that
+     * does not correspond to a content type).
+     *
+     * A plugin-route controller can share a name with another content type's
+     * pluralName — e.g. the users-permissions plugin's `permissions` controller
+     * (which serves /api/users-permissions/permissions) vs a `Permission`
+     * content type whose pluralName is `permissions` (which serves
+     * /api/permissions). These are two distinct endpoints, and we want both on
+     * the client. When this collision occurs, disambiguate the standalone name
+     * by prefixing it with the plugin's camelCase name.
+     */
+    private resolveStandaloneNames(
+        controller: string,
+        routes: ParsedRoute[],
+        schema: ParsedSchema,
+    ): { className: string; propName: string } {
+        const collides = schema.contentTypes.some(
+            ct => ct.pluralName === controller,
+        )
+        const pluginName = routes.find(r => r.pluginName)?.pluginName
+
+        if (collides && pluginName) {
+            return {
+                className:
+                    toPascalCase(pluginName) + toPascalCase(controller) + 'API',
+                propName: toCamelCase(pluginName) + toPascalCase(controller),
+            }
+        }
+
+        return {
+            className: toPascalCase(controller) + 'API',
+            propName: toCamelCase(controller),
+        }
+    }
+
     private buildStandaloneDeclarations(
         schema: ParsedSchema,
         parsedRoutes?: ParsedRoutes,
@@ -1106,7 +1146,7 @@ ${standaloneInits}
         if (!parsedRoutes) return ''
 
         const declarations: string[] = []
-        for (const [controller] of parsedRoutes.byController) {
+        for (const [controller, routes] of parsedRoutes.byController) {
             if (controller === 'auth' || controller === 'user') continue
 
             const hasContentType = schema.contentTypes.some(
@@ -1114,8 +1154,11 @@ ${standaloneInits}
             )
 
             if (!hasContentType) {
-                const className = toPascalCase(controller) + 'API'
-                const propName = toCamelCase(controller)
+                const { className, propName } = this.resolveStandaloneNames(
+                    controller,
+                    routes,
+                    schema,
+                )
                 declarations.push(`  ${propName}: ${className}`)
             }
         }
@@ -1130,7 +1173,7 @@ ${standaloneInits}
         if (!parsedRoutes) return ''
 
         const inits: string[] = []
-        for (const [controller] of parsedRoutes.byController) {
+        for (const [controller, routes] of parsedRoutes.byController) {
             if (controller === 'auth' || controller === 'user') continue
 
             const hasContentType = schema.contentTypes.some(
@@ -1138,8 +1181,11 @@ ${standaloneInits}
             )
 
             if (!hasContentType) {
-                const className = toPascalCase(controller) + 'API'
-                const propName = toCamelCase(controller)
+                const { className, propName } = this.resolveStandaloneNames(
+                    controller,
+                    routes,
+                    schema,
+                )
                 inits.push(
                     `    this.${propName} = new ${className}(this.config)`,
                 )
