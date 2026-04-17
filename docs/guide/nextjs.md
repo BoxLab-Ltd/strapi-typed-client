@@ -15,8 +15,10 @@ const nextConfig = {
 }
 
 export default withStrapiTypes({
-    strapiUrl: process.env.STRAPI_URL ?? 'http://localhost:1337',
+    strapiUrl: process.env.NEXT_PUBLIC_STRAPI_URL ?? 'http://localhost:1337',
     token: process.env.STRAPI_TOKEN,
+    format: 'ts',
+    output: './src/strapi'
 })(nextConfig)
 ```
 
@@ -160,10 +162,10 @@ In a Next.js App Router Server Component:
 
 ```tsx
 // app/articles/page.tsx
-import { StrapiClient } from '@/strapi'
+import { StrapiClient } from 'strapi-typed-client'
 
 const strapi = new StrapiClient({
-    baseURL: process.env.STRAPI_URL!,
+    baseURL: process.env.NEXT_PUBLIC_STRAPI_URL ?? 'http://localhost:1337',
     token: process.env.STRAPI_TOKEN,
 })
 
@@ -198,11 +200,11 @@ Use the client in Server Actions for mutations:
 // app/articles/actions.ts
 'use server'
 
-import { StrapiClient } from '@/strapi'
+import { StrapiClient } from 'strapi-typed-client'
 import { revalidateTag } from 'next/cache'
 
 const strapi = new StrapiClient({
-    baseURL: process.env.STRAPI_URL!,
+    baseURL: process.env.NEXT_PUBLIC_STRAPI_URL ?? 'http://localhost:1337',
     token: process.env.STRAPI_TOKEN,
 })
 

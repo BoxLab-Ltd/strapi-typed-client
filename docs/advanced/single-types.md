@@ -154,11 +154,12 @@ const landing = await strapi.landing.find(
 A complete example fetching and rendering a landing page in Next.js:
 
 ```typescript
-import { StrapiClient } from '@myapp/strapi-types';
+import { StrapiClient } from 'strapi-typed-client'
 
 const strapi = new StrapiClient({
-  baseURL: process.env.NEXT_PUBLIC_STRAPI_URL!,
-});
+    baseURL: process.env.NEXT_PUBLIC_STRAPI_URL ?? 'http://localhost:1337',
+    token: process.env.STRAPI_TOKEN,
+})
 
 export default async function LandingPage() {
   const { data: landing } = await strapi.landing.find({
