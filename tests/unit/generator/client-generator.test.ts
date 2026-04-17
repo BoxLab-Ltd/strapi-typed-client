@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { ClientGenerator } from '../../../src/generator/client-generator.js'
 import type { ParsedSchema } from '../../../src/schema-types.js'
+import type { ParsedEndpoint } from '../../../src/shared/endpoint-types.js'
 
 const mockSchema: ParsedSchema = {
     contentTypes: [
@@ -565,6 +566,75 @@ describe('ClientGenerator', () => {
                 output.indexOf('class AuthAPI extends BaseAPI'),
             )
             expect(authSection).toContain('data: Partial<User>,')
+        })
+    })
+
+    describe('Standalone controller / content type pluralName collisions', () => {
+        // Reproduces the case where the users-permissions plugin exposes a
+        // standalone `permissions` controller (/api/users-permissions/permissions)
+        // AND the project has a `Permission` content type whose pluralName is
+        // also `permissions` (/api/permissions). These are two distinct
+        // endpoints — both should be callable from the client. Without
+        // disambiguation the generator emits `permissions` twice on
+        // StrapiClient, producing a "Duplicate member" esbuild error.
+        const schema: ParsedSchema = {
+            contentTypes: [
+                {
+                    name: 'PluginUsersPermissionsPermission',
+                    cleanName: 'Permission',
+                    collectionName: 'up_permissions',
+                    singularName: 'permission',
+                    pluralName: 'permissions',
+                    kind: 'collection',
+                    attributes: [
+                        {
+                            name: 'action',
+                            type: { kind: 'string' },
+                            required: true,
+                        },
+                    ],
+                    relations: [],
+                    media: [],
+                    components: [],
+                    dynamicZones: [],
+                },
+            ],
+            components: [],
+        }
+
+        const endpoints: ParsedEndpoint[] = [
+            {
+                method: 'GET',
+                path: '/permissions',
+                handler: 'plugin::users-permissions.permissions.getPermissions',
+                controller: 'permissions',
+                action: 'getPermissions',
+                pluginName: 'users-permissions',
+            },
+        ]
+
+        const result = new ClientGenerator().generate(schema, endpoints)
+        const clientSection = result.slice(
+            result.indexOf('export class StrapiClient'),
+        )
+
+        it('should emit the content type collection property exactly once', () => {
+            const permissionsDeclarations =
+                clientSection.match(/^\s*permissions:\s/gm) ?? []
+            expect(permissionsDeclarations.length).toBe(1)
+        })
+
+        it('should preserve the standalone plugin endpoint under a disambiguated name', () => {
+            // The standalone class is still emitted (under a plugin-prefixed
+            // name) so the /api/users-permissions/permissions endpoint remains
+            // callable — we only rename to avoid the property collision.
+            expect(result).toContain('class UsersPermissionsPermissionsAPI')
+            expect(clientSection).toContain(
+                'usersPermissionsPermissions: UsersPermissionsPermissionsAPI',
+            )
+            expect(clientSection).toContain(
+                'this.usersPermissionsPermissions = new UsersPermissionsPermissionsAPI(this.config)',
+            )
         })
     })
 })
