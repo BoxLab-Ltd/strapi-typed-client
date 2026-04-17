@@ -22,6 +22,8 @@ export class TypesGenerator {
 
         // Header comments
         sf.addStatements([
+            '/* eslint-disable */',
+            '// @ts-nocheck',
             '// Auto-generated TypeScript types from Strapi schema',
             '// Do not edit manually',
         ])
@@ -204,12 +206,12 @@ export interface CodeBlock {
 }
 
 /**
- * List block - ordered or unordered
+ * List block - ordered or unordered (supports nesting)
  */
 export interface ListBlock {
   type: 'list'
   format: 'ordered' | 'unordered'
-  children: ListItemBlock[]
+  children: (ListItemBlock | ListBlock)[]
 }
 
 /**
@@ -221,7 +223,7 @@ export interface ListItemBlock {
 }
 
 /**
- * Image block - embedded image with optional caption
+ * Image block - embedded image
  */
 export interface ImageBlock {
   type: 'image'
@@ -230,19 +232,20 @@ export interface ImageBlock {
     alternativeText?: string | null
     url: string
     caption?: string | null
-    width?: number
-    height?: number
-    formats?: BaseMediaFormats | null
+    width: number
+    height: number
+    formats?: BaseMediaFormats
     hash: string
     ext: string
     mime: string
     size: number
     previewUrl?: string | null
     provider: string
+    provider_metadata?: unknown | null
     createdAt: string
     updatedAt: string
   }
-  children: InlineNode[]
+  children: [{ type: 'text'; text: '' }]
 }
 
 /**
@@ -554,7 +557,7 @@ type _ApplyFields<TFull, TBase, TEntry> = TEntry extends true ? TFull : TEntry e
         const perFieldPop = this.buildPerFieldPopulate(type)
 
         return `// Payload type for ${name} with populate support
-export type ${name}GetPayload<P extends { populate?: any } = {}> =
+export type ${name}GetPayload<P extends { populate?: ${name}PopulateParam | (keyof ${name}PopulateParam & string)[] | '*' | true } = {}> =
   ${name} &
   (P extends { populate: infer Pop }
     ? Pop extends '*' | true

@@ -14,13 +14,14 @@ npx strapi-types generate --url http://localhost:1337
 
 **Options:**
 
-| Option     | Description                               | Default                                 |
-| ---------- | ----------------------------------------- | --------------------------------------- |
-| `--url`    | Strapi server URL                         | `STRAPI_URL` env var                    |
-| `--token`  | API token for authenticated access        | `STRAPI_TOKEN` env var                  |
-| `--output` | Output directory for generated files      | `node_modules/strapi-typed-client/dist` |
-| `--silent` | Suppress all console output               | `false`                                 |
-| `--force`  | Regenerate even if schema has not changed | `false`                                 |
+| Option     | Description                                                        | Default                                 |
+| ---------- | ------------------------------------------------------------------ | --------------------------------------- |
+| `--url`    | Strapi server URL                                                  | `STRAPI_URL` env var                    |
+| `--token`  | API token for authenticated access                                 | `STRAPI_TOKEN` env var                  |
+| `--output` | Output directory for generated files                               | `node_modules/strapi-typed-client/dist` |
+| `--silent` | Suppress all console output                                        | `false`                                 |
+| `--force`  | Regenerate even if schema has not changed                          | `false`                                 |
+| `--format` | Output format: `js` (compiled `.js` + `.d.ts`) or `ts` (raw `.ts`) | `js`                                    |
 
 **Examples:**
 
@@ -36,7 +37,14 @@ npx strapi-types generate --url http://localhost:1337 --output ./src/api --silen
 
 # Force regeneration (ignore schema hash)
 npx strapi-types generate --url http://localhost:1337 --force
+
+# Emit raw TypeScript into your source tree (for monorepos)
+npx strapi-types generate --format ts --output ./src/strapi
 ```
+
+::: tip `--format ts`
+Emits raw `.ts` sources instead of compiled `.js` + `.d.ts`. Useful when your package builds its own sources (Turborepo, Nx, pnpm workspaces). The output must live **outside** `node_modules` — the CLI will refuse to write `.ts` into the package dir. Your consumer `tsconfig.json` needs `moduleResolution: "bundler"` or `"nodenext"` so the `.js`-extension imports resolve to `.ts` source.
+:::
 
 ### `check`
 

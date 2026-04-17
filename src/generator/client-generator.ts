@@ -1,3 +1,6 @@
+import * as fs from 'fs'
+import * as path from 'path'
+import { createRequire } from 'module'
 import { Project, SourceFile } from 'ts-morph'
 import { ParsedSchema, ContentType } from '../schema-types.js'
 import { AuthApiGenerator } from './auth-api-generator.js'
@@ -13,6 +16,28 @@ import {
     convertEndpointsToCustomTypes,
 } from '../core/endpoint-converter.js'
 
+/**
+ * Vendored stringifyQuery / appendEntry are kept as a real .ts module at
+ * src/generator/templates/stringify-query.ts (single source of truth — tests
+ * import and execute it directly). For the generated client we need the raw
+ * TypeScript source so type annotations survive in `--format ts` output, so
+ * we read the file as text and strip the `export` keyword before embedding.
+ */
+const _require = createRequire(import.meta.url)
+function loadStringifyQuerySource(): string {
+    const pkgJsonPath = _require.resolve('strapi-typed-client/package.json')
+    const pkgRoot = path.dirname(pkgJsonPath)
+    const tsPath = path.join(
+        pkgRoot,
+        'src/generator/templates/stringify-query.ts',
+    )
+    return fs
+        .readFileSync(tsPath, 'utf-8')
+        .replace(/^export /gm, '')
+        .trim()
+}
+const STRINGIFY_QUERY_SOURCE = loadStringifyQuerySource()
+
 export class ClientGenerator {
     private authApiGenerator: AuthApiGenerator
     private customApiGenerator: CustomApiGenerator
@@ -26,6 +51,7 @@ export class ClientGenerator {
         schema: ParsedSchema,
         endpoints?: ParsedEndpoint[],
         extraTypes?: ExtraControllerType[],
+        schemaHash: string = '',
     ): string {
         const project = new Project({ useInMemoryFileSystem: true })
         const sf = project.createSourceFile('client.ts')
@@ -42,10 +68,15 @@ export class ClientGenerator {
             this.customApiGenerator.setCustomTypes(customTypes)
         }
 
-        // Header comments
+        // Header comments + baked SCHEMA_HASH. Kept at the top so CLI tooling
+        // can read it by slicing the first few hundred bytes of the file
+        // without parsing the rest (see readLocalSchemaHash).
         sf.addStatements([
+            '/* eslint-disable */',
+            '// @ts-nocheck',
             '// Auto-generated Strapi API client',
             '// Do not edit manually',
+            `export const SCHEMA_HASH = ${JSON.stringify(schemaHash)}`,
         ])
 
         // Imports
@@ -157,8 +188,7 @@ export class ClientGenerator {
         )
 
         return `import type { ${imports.join(', ')} } from './types.js'
-import type { ${filterImports.join(', ')} } from './types.js'
-import qs from 'qs'`
+import type { ${filterImports.join(', ')} } from './types.js'`
     }
 
     private addUtilityTypes(sf: SourceFile, schema: ParsedSchema): void {
@@ -594,15 +624,12 @@ class BaseAPI {
 
   protected buildQueryString(params?: QueryParams): string {
     if (!params) return ''
-
-    const queryString = qs.stringify(params, {
-      encodeValuesOnly: true,
-      skipNulls: true,
-    })
-
-    return queryString ? \`?\${queryString}\` : ''
+    const query = stringifyQuery(params)
+    return query ? \`?\${query}\` : ''
   }
-}`
+}
+
+${STRINGIFY_QUERY_SOURCE}`
     }
 
     private addGetPopulatedType(sf: SourceFile, schema: ParsedSchema): void {
@@ -1046,7 +1073,6 @@ ${standaloneInits}
     error?: string
   }> {
     try {
-      const { SCHEMA_HASH } = await import("./schema-meta.js")
       const response = await fetch(\`\${this.config.baseURL}/api/strapi-types/schema-hash\`)
       if (!response.ok) {
         return {

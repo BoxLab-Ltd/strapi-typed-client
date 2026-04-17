@@ -253,7 +253,7 @@ describe('TypesGenerator', () => {
         })
 
         it('should type ImageBlock.image.formats as BaseMediaFormats', () => {
-            expect(output).toContain('formats?: BaseMediaFormats | null')
+            expect(output).toContain('formats?: BaseMediaFormats')
         })
 
         it('should generate BlocksContent type', () => {
@@ -450,7 +450,7 @@ describe('TypesGenerator', () => {
 
         it('should generate ItemGetPayload with populate support', () => {
             expect(output).toContain(
-                'export type ItemGetPayload<P extends { populate?: any } = {}> =',
+                "export type ItemGetPayload<P extends { populate?: ItemPopulateParam | (keyof ItemPopulateParam & string)[] | '*' | true } = {}> =",
             )
             expect(output).toContain('Item &')
         })
@@ -487,14 +487,14 @@ describe('TypesGenerator', () => {
     describe('Component GetPayload types', () => {
         it('should generate LandingHeroGetPayload for component with media', () => {
             expect(output).toContain(
-                'export type LandingHeroGetPayload<P extends { populate?: any } = {}> =',
+                "export type LandingHeroGetPayload<P extends { populate?: LandingHeroPopulateParam | (keyof LandingHeroPopulateParam & string)[] | '*' | true } = {}> =",
             )
             expect(output).toContain('LandingHero &')
         })
 
         it('should generate LandingFeatureGetPayload for component with relation', () => {
             expect(output).toContain(
-                'export type LandingFeatureGetPayload<P extends { populate?: any } = {}> =',
+                "export type LandingFeatureGetPayload<P extends { populate?: LandingFeaturePopulateParam | (keyof LandingFeaturePopulateParam & string)[] | '*' | true } = {}> =",
             )
             expect(output).toContain('LandingFeature &')
         })

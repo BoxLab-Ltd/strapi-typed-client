@@ -16,7 +16,9 @@ const nextConfig = {
 
 export default withStrapiTypes({
     strapiUrl: process.env.NEXT_PUBLIC_STRAPI_URL ?? 'http://localhost:1337',
-    token: process.env.STRAPI_API_TOKEN,
+    token: process.env.STRAPI_TOKEN,
+    format: 'ts',
+    output: './src/strapi'
 })(nextConfig)
 ```
 
@@ -26,6 +28,31 @@ export default withStrapiTypes({
 | ------------ | ------------------------------------------------------------------------------ |
 | `next dev`   | Connects to Strapi via SSE and regenerates types instantly when schema changes |
 | `next build` | Runs a one-time generation before the build starts                             |
+
+### Options
+
+| Option      | Description                                                                                         | Default                                     |
+| ----------- | --------------------------------------------------------------------------------------------------- | ------------------------------------------- |
+| `strapiUrl` | Strapi server URL                                                                                   | `STRAPI_URL` env or `http://localhost:1337` |
+| `token`     | API token                                                                                           | `STRAPI_TOKEN` env                          |
+| `silent`    | Suppress generation logs                                                                            | `false`                                     |
+| `format`    | `js` (compiled, default) or `ts` (raw `.ts` emitted into your source tree for monorepos)            | `js`                                        |
+| `output`    | Output directory. Required when `format: 'ts'` — must point at your source tree, not `node_modules` | Package dir under `node_modules`            |
+
+### Source-tree output for monorepos
+
+In monorepos where the shared types package compiles its own sources, emit raw `.ts` into the source tree instead of the default `node_modules` dist:
+
+```ts
+export default withStrapiTypes({
+    strapiUrl: process.env.STRAPI_URL ?? 'http://localhost:1337',
+    token: process.env.STRAPI_TOKEN,
+    format: 'ts',
+    output: './src/strapi',
+})(nextConfig)
+```
+
+Your `tsconfig.json` needs `moduleResolution: "bundler"` or `"nodenext"` so `.js`-extension imports inside the generated client resolve to `.ts` source (the Next.js default already satisfies this).
 
 ::: tip
 This replaces the need to run `strapi-types watch` or `strapi-types generate` manually. The wrapper handles everything.

@@ -6,9 +6,6 @@ import * as fs from 'fs'
 import * as path from 'path'
 import { createApiClient } from '../utils/api-client.js'
 import {
-    writeFile,
-    getSchemaMetaPath,
-    generateSchemaMetaContent,
     readLocalSchemaHash,
     getDefaultOutputDir,
 } from '../utils/file-writer.js'
@@ -21,6 +18,26 @@ export interface GenerateOptions {
     output?: string
     silent?: boolean
     force?: boolean
+    format?: 'js' | 'ts'
+}
+
+/**
+ * Shipping raw .ts into node_modules breaks at runtime: Node can't require
+ * .ts files and the package.json exports still point at the missing .js.
+ * Force consumers to pick a source-tree output instead.
+ */
+function assertOutputDirForFormat(
+    outputDir: string,
+    format: 'js' | 'ts',
+): void {
+    if (format !== 'ts') return
+    const normalized = path.resolve(outputDir)
+    if (normalized.split(path.sep).includes('node_modules')) {
+        throw new Error(
+            `--format ts cannot write into node_modules (${outputDir}). ` +
+                `Point --output at your source tree (e.g. ./src/strapi).`,
+        )
+    }
 }
 
 export interface GenerateResult {
@@ -38,9 +55,12 @@ export async function generate(
     options: GenerateOptions,
 ): Promise<GenerateResult> {
     const outputDir = options.output || getDefaultOutputDir()
+    const format: 'js' | 'ts' = options.format ?? 'js'
     const filesWritten: string[] = []
 
     try {
+        assertOutputDirForFormat(outputDir, format)
+
         // Create API client
         const client = createApiClient({
             url: options.url,
@@ -55,11 +75,11 @@ export async function generate(
             const localHash = readLocalSchemaHash(outputDir)
 
             // Verify generated files actually exist (they may be lost after package update)
-            const generatedFiles = [
-                'types.d.ts',
-                'client.d.ts',
-                'index.d.ts',
-            ].map(f => path.join(outputDir, f))
+            const generatedFiles = (
+                format === 'ts'
+                    ? ['types.ts', 'client.ts', 'index.ts']
+                    : ['types.d.ts', 'client.d.ts', 'index.d.ts']
+            ).map(f => path.join(outputDir, f))
             const allFilesExist = generatedFiles.every(f => fs.existsSync(f))
 
             if (localHash && allFilesExist) {
@@ -117,7 +137,6 @@ export async function generate(
             pluginEndpoints,
             extraTypes,
             hash,
-            generatedAt,
         } = await client.getSchema()
 
         // Merge API and plugin endpoints for generation
@@ -147,22 +166,29 @@ export async function generate(
         }
 
         const generator = new Generator(outputDir)
-        await generator.generate(parsedSchema, endpoints, extraTypes)
-
-        // Track generated files
-        filesWritten.push(
-            path.join(outputDir, 'types.js'),
-            path.join(outputDir, 'types.d.ts'),
-            path.join(outputDir, 'client.js'),
-            path.join(outputDir, 'client.d.ts'),
-            path.join(outputDir, 'index.js'),
-            path.join(outputDir, 'index.d.ts'),
+        await generator.generate(
+            parsedSchema,
+            endpoints,
+            extraTypes,
+            hash,
+            format,
         )
 
-        // Write schema metadata
-        const metaPath = getSchemaMetaPath(outputDir)
-        writeFile(metaPath, generateSchemaMetaContent(hash, generatedAt))
-        filesWritten.push(metaPath)
+        // Track generated files
+        const emittedFiles =
+            format === 'ts'
+                ? ['types.ts', 'client.ts', 'index.ts']
+                : [
+                      'types.js',
+                      'types.d.ts',
+                      'client.js',
+                      'client.d.ts',
+                      'index.js',
+                      'index.d.ts',
+                  ]
+        for (const f of emittedFiles) {
+            filesWritten.push(path.join(outputDir, f))
+        }
 
         return {
             success: true,
@@ -184,6 +210,7 @@ interface GenerateCliOptions {
     output?: string
     silent?: boolean
     force?: boolean
+    format?: string
 }
 
 /**
@@ -209,13 +236,26 @@ export function createGenerateCommand(program: {
         )
         .option('-s, --silent', 'Suppress output messages')
         .option('-f, --force', 'Force regeneration even if schema unchanged')
+        .option(
+            '--format <js|ts>',
+            'Output format: js (compiled .js + .d.ts, default) or ts (raw .ts for monorepo/source-tree output)',
+            'js',
+        )
         .action(async (opts: GenerateCliOptions) => {
+            if (opts.format && opts.format !== 'js' && opts.format !== 'ts') {
+                console.error(
+                    `Invalid --format value: ${opts.format}. Expected 'js' or 'ts'.`,
+                )
+                process.exit(1)
+            }
+
             const result = await generate({
                 url: opts.url,
                 token: opts.token,
                 output: opts.output,
                 silent: opts.silent,
                 force: opts.force,
+                format: opts.format as 'js' | 'ts' | undefined,
             })
 
             if (!result.success) {
