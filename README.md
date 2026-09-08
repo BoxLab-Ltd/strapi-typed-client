@@ -70,6 +70,7 @@ articles[0].category.name // fully typed
 - Automatic type inference for `populate` — no manual casting
 - Nested populate with unlimited depth
 - Separate Input types for create/update (relations as IDs)
+- Creator fields — `createdBy` / `updatedBy` for content types that set `populateCreatorFields`
 - DynamicZone support with union types
 - Components and nested components
 - Entity-specific filter types
