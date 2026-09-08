@@ -206,7 +206,7 @@ describe('generateAuthApiClass - default routes (no args)', () => {
 
     it('should generate sendEmailConfirmation method', () => {
         expect(result).toContain(
-            'async sendEmailConfirmation(email: string): Promise<SendEmailConfirmationResponse>',
+            'async sendEmailConfirmation(email: string, nextOptions?: NextOptions): Promise<SendEmailConfirmationResponse>',
         )
         expect(result).toContain('POST /auth/send-email-confirmation')
         expect(result).toContain('body: JSON.stringify({ email })')
@@ -611,7 +611,9 @@ describe('generateAuthApiClass — refresh mode', () => {
     })
 
     it('emits a real logout posting to /api/auth/logout and clearing local state', () => {
-        expect(result).toContain('async logout(): Promise<void> {')
+        expect(result).toContain(
+            'async logout(nextOptions?: NextOptions): Promise<void> {',
+        )
         expect(result).toContain('/api/auth/logout')
         expect(result).toContain('await this.clearToken()')
         expect(result).not.toContain('@deprecated Use `clearToken()`')

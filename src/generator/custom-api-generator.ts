@@ -1,6 +1,7 @@
 import { ParsedRoute } from '../shared/route-types.js'
 import { ParsedCustomTypes } from '../shared/custom-types.js'
 import { toCamelCase, toPascalCase } from '../shared/string-utils.js'
+import { buildMethodParams, buildRequestCall } from './method-signature.js'
 
 /**
  * CollectionAPI / SingleTypeAPI CRUD surface. A custom route whose action
@@ -108,25 +109,23 @@ export class CustomApiGenerator {
             ? `\`\${this.config.baseURL}/api${this.generateStandalonePathExpression(route)}\``
             : `\`\${this.config.baseURL}/api/\${this.endpoint}${this.generatePathExpression(route, endpoint)}\``
 
+        const responseType = `StrapiResponse<${outputType}>`
         const bodyBlock = hasBody
             ? `    // If data is FormData, use it directly; otherwise JSON stringify
     const body = data instanceof FormData
       ? data
       : data ? JSON.stringify(data) : undefined
 
-    const response = await this.request<StrapiResponse<${outputType}>>(
-      url,
-      {
-        method: '${route.method}',
-        body,
-      }
-    )`
-            : route.method === 'GET'
-              ? `    const response = await this.request<StrapiResponse<${outputType}>>(url)`
-              : `    const response = await this.request<StrapiResponse<${outputType}>>(
-      url,
-      { method: '${route.method}' }
-    )`
+    const response = await ${buildRequestCall({
+        responseType,
+        init: `{ method: '${route.method}', body }`,
+    })}`
+            : `    const response = await ${buildRequestCall({
+                  responseType,
+                  ...(route.method === 'GET'
+                      ? {}
+                      : { init: `{ method: '${route.method}' }` }),
+              })}`
 
         return `  /**
    * ${route.method} ${route.path}
@@ -143,23 +142,16 @@ ${bodyBlock}
         route: ParsedRoute,
         inputType: string = 'any',
     ): string {
-        const params: string[] = []
-
-        // Add path parameters
-        for (const param of route.params) {
-            params.push(`${param}: string`)
-        }
-
-        // Add data parameter for POST/PUT/PATCH (support both typed data and FormData)
-        if (
+        const hasBody =
             route.method === 'POST' ||
             route.method === 'PUT' ||
             route.method === 'PATCH'
-        ) {
-            params.push(`data?: ${inputType} | FormData`)
-        }
 
-        return params.join(', ')
+        return buildMethodParams({
+            pathParams: route.params,
+            // Support both typed data and FormData.
+            ...(hasBody ? { data: { type: `${inputType} | FormData` } } : {}),
+        })
     }
 
     private generatePathExpression(

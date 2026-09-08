@@ -562,7 +562,7 @@ See the [Strapi documentation on status](https://docs.strapi.io/cms/api/rest/sta
 
 ## NextOptions
 
-Optional second parameter on all API methods for Next.js cache control.
+Optional **last** parameter on every generated method that issues a request — CRUD, auth, plugin APIs and your own custom routes alike. The position shifts with the method's own parameters (`find(params?, nextOptions?)`, `update(documentId, data, nextOptions?)`), so pass `undefined` for the ones you are skipping.
 
 ```ts
 interface NextOptions {
@@ -600,8 +600,20 @@ await strapi.articles.find(
 )
 ```
 
+Custom routes generated from your own Strapi controllers take it in the same place:
+
+```ts
+// GET /api/noticias/years
+await strapi.noticias.years({ tags: ['noticias-years'], revalidate: 60 })
+
+// POST /api/items/:id/increment-run — skip the optional body
+await strapi.items.incrementRun('doc-id', undefined, { tags: ['runs'] })
+```
+
 ::: info
 `NextOptions` are passed through to the underlying `fetch` call as `{ next: { revalidate, tags }, cache }`. Custom `headers` are merged with the default headers (Content-Type, Authorization). These options work in any environment, not just Next.js.
+
+Note the shape is flat — `{ tags, revalidate }`, not `{ next: { tags, revalidate } }`. The client does the mapping onto `fetch` itself.
 :::
 
 ## StrapiResponse

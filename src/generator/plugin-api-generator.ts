@@ -3,6 +3,7 @@ import {
     PluginContract,
     PluginEndpoint,
 } from './plugin-registry.js'
+import { buildMethodParams, buildRequestCall } from './method-signature.js'
 
 /**
  * Generates standalone API classes for Strapi plugins listed in
@@ -54,7 +55,11 @@ ${methods}
         const method = `${docComment}
   async ${ep.methodName}(${params}): Promise<${ep.responseType}> {
 ${indentedUrl}
-    return this.request<${ep.responseType}>(url, ${reqOptions}, nextOptions, '${errorPrefix}')
+    return ${buildRequestCall({
+        responseType: ep.responseType,
+        init: reqOptions,
+        errorPrefix,
+    })}
   }`
 
         if (!ep.deprecatedAlias) return method
@@ -80,24 +85,17 @@ ${indentedUrl}
     }
 
     private buildParameters(ep: PluginEndpoint): string {
-        const parts: string[] = []
-
-        if (ep.paramTypes) {
-            for (const [name, type] of Object.entries(ep.paramTypes)) {
-                parts.push(`${name}: ${type}`)
-            }
-        }
-
-        if (ep.bodyType) {
-            parts.push(`body: ${ep.bodyType}`)
-        }
-
-        if (ep.queryType) {
-            parts.push(`params?: ${ep.queryType}`)
-        }
-
-        parts.push('nextOptions?: NextOptions')
-        return parts.join(', ')
+        // paramTypes carry their own types, so they go through `extra` rather
+        // than the string-typed pathParams slot.
+        return buildMethodParams({
+            extra: [
+                ...Object.entries(ep.paramTypes ?? {}).map(
+                    ([name, type]) => `${name}: ${type}`,
+                ),
+                ...(ep.bodyType ? [`body: ${ep.bodyType}`] : []),
+                ...(ep.queryType ? [`params?: ${ep.queryType}`] : []),
+            ],
+        })
     }
 
     private buildUrlLines(ep: PluginEndpoint): string[] {

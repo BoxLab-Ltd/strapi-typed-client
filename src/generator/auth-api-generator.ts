@@ -2,6 +2,11 @@ import { Project } from 'ts-morph'
 import { ParsedRoute } from '../shared/route-types.js'
 import { toCamelCase } from '../shared/index.js'
 import type { AuthMode } from '../shared/strapi-schema-types.js'
+import {
+    buildMethodParams,
+    buildRequestCall,
+    NEXT_OPTIONS_PARAM,
+} from './method-signature.js'
 
 /**
  * Standard users-permissions auth routes, used as the fallback when the schema
@@ -575,12 +580,13 @@ ${bodyBlock}
    * Handler: ${route.handler}
    * Resend the confirmation email to a user who hasn't confirmed yet.
    */
-  async sendEmailConfirmation(email: string): Promise<SendEmailConfirmationResponse> {
+  async sendEmailConfirmation(email: string, ${NEXT_OPTIONS_PARAM}): Promise<SendEmailConfirmationResponse> {
     const url = \`\${this.config.baseURL}/api/auth/send-email-confirmation\`
-    return this.request<SendEmailConfirmationResponse>(url, {
-      method: 'POST',
-      body: JSON.stringify({ email }),
-    }, undefined, 'Strapi Auth')
+    return ${buildRequestCall({
+        responseType: 'SendEmailConfirmationResponse',
+        init: "{ method: 'POST', body: JSON.stringify({ email }) }",
+        errorPrefix: 'Strapi Auth',
+    })}
   }`
     }
 
@@ -628,18 +634,15 @@ ${bodyBlock}
    * in-memory tokens. Best-effort: local state is cleared even when the
    * server call fails (e.g. the session is already dead).
    */
-  async logout(): Promise<void> {
+  async logout(${NEXT_OPTIONS_PARAM}): Promise<void> {
     const session = getAuthSession(this.config)
     try {
-      await this.request<unknown>(
-        \`\${this.config.baseURL}/api/auth/logout\`,
-        {
-          method: 'POST',
-          ...(session.refreshToken && { body: JSON.stringify({ refreshToken: session.refreshToken }) }),
-        },
-        undefined,
-        'Strapi Auth'
-      )
+      await ${buildRequestCall({
+          responseType: 'unknown',
+          url: '`${this.config.baseURL}/api/auth/logout`',
+          init: "{ method: 'POST', ...(session.refreshToken && { body: JSON.stringify({ refreshToken: session.refreshToken }) }) }",
+          errorPrefix: 'Strapi Auth',
+      })}
     } catch {
       // Best-effort — local cleanup below is what matters.
     } finally {
@@ -666,39 +669,37 @@ ${bodyBlock}
     }
 
     private generateAuthMethodParams(route: ParsedRoute): string {
-        const params: string[] = []
-
-        // Add path parameters
-        for (const param of route.params) {
-            params.push(`${param}: string`)
-        }
-
-        // Add data parameter for POST/PUT/PATCH
-        if (
+        const hasBody =
             route.method === 'POST' ||
             route.method === 'PUT' ||
             route.method === 'PATCH'
-        ) {
-            // Infer data type based on action
-            if (route.action === 'callback' && route.path === '/auth/local') {
-                params.push('data: LoginCredentials')
-            } else if (route.action === 'register') {
-                params.push('data: RegisterData')
-            } else if (route.action === 'forgotPassword') {
-                params.push('data: ForgotPasswordData')
-            } else if (route.action === 'resetPassword') {
-                params.push('data: ResetPasswordData')
-            } else if (route.action === 'changePassword') {
-                params.push('data: ChangePasswordData')
-            } else {
-                params.push('data?: any')
-            }
+
+        return buildMethodParams({
+            pathParams: route.params,
+            ...(hasBody ? { data: this.authDataParam(route) } : {}),
+        })
+    }
+
+    /** Body type for an auth route, inferred from its action. */
+    private authDataParam(route: ParsedRoute): {
+        type: string
+        optional: boolean
+    } {
+        const typed: Record<string, string> = {
+            register: 'RegisterData',
+            forgotPassword: 'ForgotPasswordData',
+            resetPassword: 'ResetPasswordData',
+            changePassword: 'ChangePasswordData',
         }
 
-        // Add NextOptions parameter
-        params.push('nextOptions?: NextOptions')
+        if (route.action === 'callback' && route.path === '/auth/local') {
+            return { type: 'LoginCredentials', optional: false }
+        }
 
-        return params.join(', ')
+        const type = typed[route.action]
+        return type
+            ? { type, optional: false }
+            : { type: 'any', optional: true }
     }
 
     private generateAuthPathExpression(route: ParsedRoute): string {
