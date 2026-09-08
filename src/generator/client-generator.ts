@@ -816,7 +816,7 @@ function authHeaderValues(headers: Record<string, string>): string[] {
   return Object.keys(headers)
     .filter(k => k.toLowerCase() === 'authorization')
     .map(k => headers[k])
-    .filter(value => value !== undefined)
+    .filter((value): value is string => value !== undefined)
 }
 
 // Base API class with shared logic

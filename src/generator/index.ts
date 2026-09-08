@@ -204,8 +204,9 @@ export class Generator {
      * a formatted error message, or null if clean. Run from a temp dir on disk
      * so bundler resolution maps the `.js` import specifiers to the sibling
      * `.ts` files — the in-memory emit program can't resolve those, so it can't
-     * double as the check. Strict + skipLibCheck mirrors a typical consumer
-     * tsconfig.
+     * double as the check. Strict + noUncheckedIndexedAccess is deliberately
+     * stricter than a typical consumer tsconfig — the strict presets ship the
+     * flag, and the emitted client must stay clean under them.
      */
     private collectTypeErrors(files: Record<string, string>): string | null {
         const checkDir = fs.mkdtempSync(
