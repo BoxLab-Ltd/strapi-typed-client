@@ -114,7 +114,9 @@ Any attribute marked as `private` in the Strapi schema is automatically excluded
 
 ## Creator Fields
 
-`createdBy` and `updatedBy` are generated **only for content types that opt in**, because that is exactly what Strapi does. Strapi adds both as relations to `admin::user` and marks them `private: !options.populateCreatorFields` — so with the option off they are stripped from every REST response, and generating them would describe data your backend never sends.
+`createdBy` and `updatedBy` are generated **only for content types that opt in**, because that is exactly what Strapi does. Strapi adds both as relations to `admin::user` and marks them `private: !options.populateCreatorFields` — so with the option off they are stripped from every REST response.
+
+Generating them regardless would be worse than noise: without the option Strapi rejects the request outright with `400 ValidationError: Invalid key createdBy`. A populate key the type system accepted would fail at runtime.
 
 Enable the option in the content type's `schema.json`:
 
@@ -137,7 +139,11 @@ const articles = await strapi.articles.find({
 articles[0].createdBy?.firstname // string | null
 ```
 
-They resolve to `AdminUser`, the sanitized shape Strapi returns — `id`, `firstname`, `lastname`, `username`, `preferedLanguage`, `createdAt`, `updatedAt`. The name avoids colliding with the users-permissions `User`. Admin `email`, `roles` and the token fields stay `private` in Strapi's own schema and are never sent, so they are absent from the type.
+They resolve to `AdminUser`, the sanitized shape Strapi returns — `id`, `documentId`, `firstname`, `lastname`, `username`, `preferedLanguage`, `createdAt`, `updatedAt`, `publishedAt`. The name avoids colliding with the users-permissions `User`. Admin `email`, `roles` and the token fields stay `private` in Strapi's own schema and are never sent, so they are absent from the type.
+
+::: info
+Strapi's own guide lists this shape without `documentId` and `publishedAt`. A live 5.44 backend returns both — the type follows the response, not the guide.
+:::
 
 Both fields are read-only: Strapi marks them `writable: false`, so they are populatable and filterable but never appear in `*CreateInput` / `*UpdateInput`.
 

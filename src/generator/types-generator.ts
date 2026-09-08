@@ -242,16 +242,20 @@ export interface I18nLocale {
 /**
  * The admin user behind \`createdBy\` / \`updatedBy\`, as the content API returns it.
  * Only the four attributes admin::user leaves non-private survive sanitization —
- * email, roles and the token fields are private and never sent.
+ * email, roles and the token fields are private and never sent. The document
+ * base fields come with it: Strapi's own guide lists neither documentId nor
+ * publishedAt, but a live 5.44 backend returns both.
  */
 export interface AdminUser {
   id: number
+  documentId: string
   firstname: string | null
   lastname: string | null
   username: string | null
   preferedLanguage: string | null
   createdAt: string
   updatedAt: string
+  publishedAt: string | null
 }
 
 // Strapi Blocks Editor API Types

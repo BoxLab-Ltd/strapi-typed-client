@@ -213,6 +213,9 @@ async function _assert() {
   void _name
   // @ts-expect-error - email is private on admin::user and never returned
   void (await client.widgets.find({ populate: { createdBy: true } }))[0]!.createdBy!.email
+  // the document base fields ride along, as a live backend returns them
+  const _docId: string = (await client.widgets.find({ populate: { createdBy: true } }))[0]!.createdBy!.documentId
+  void _docId
   // they narrow through the nested populate options too
   await client.widgets.find({ populate: { updatedBy: { fields: ['username'], filters: { firstname: { $eq: 'a' } } } } })
   // @ts-expect-error - creator fields are server-managed and rejected on write
