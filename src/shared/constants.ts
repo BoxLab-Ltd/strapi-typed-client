@@ -16,15 +16,18 @@ export const SYSTEM_FIELDS = [
 ] as const
 
 /**
- * Private/internal Strapi fields that should be excluded from generated types
- * These fields are managed by Strapi and not accessible via API
+ * Creator fields Strapi adds to every content type as relations to `admin::user`.
+ * They are only readable when the content type sets `options.populateCreatorFields`
+ * — Strapi encodes that choice as `private: !populateCreatorFields`, so the
+ * private flag alone decides whether they reach the generated types.
  */
-export const PRIVATE_FIELDS = ['createdBy', 'updatedBy'] as const
+export const CREATOR_FIELDS = ['createdBy', 'updatedBy'] as const
 
 /**
- * All fields to skip when generating entity types
+ * Generated name for the sanitized `admin::user` shape the creator fields resolve
+ * to. Not `User` — that one belongs to users-permissions.
  */
-export const SKIP_FIELDS = [...PRIVATE_FIELDS] as const
+export const ADMIN_USER_TYPE = 'AdminUser'
 
 /**
  * Strapi filter operators

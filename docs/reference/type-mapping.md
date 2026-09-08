@@ -97,14 +97,12 @@ A readonly `__typename` field is also added to content type interfaces for nomin
 
 The following fields from the Strapi schema are **not** included in generated types:
 
-| Field / Attribute            | Reason                                        |
-| ---------------------------- | --------------------------------------------- |
-| `createdBy`                  | Admin-only field                              |
-| `updatedBy`                  | Admin-only field                              |
-| `publishedAt`                | Managed by Strapi internally                  |
-| `password`                   | Private attribute                             |
-| Admin relations (`admin::*`) | Admin panel internals                         |
-| Non-user plugin relations    | Plugin internals (except `users-permissions`) |
+| Field / Attribute            | Reason                                            |
+| ---------------------------- | ------------------------------------------------- |
+| `publishedAt`                | Managed by Strapi internally                      |
+| `password`                   | Private attribute                                 |
+| Admin relations (`admin::*`) | Admin panel internals (except the creator fields) |
+| Non-user plugin relations    | Plugin internals (except `users-permissions`)     |
 
 ::: info i18n Fields
 If your content type has the Strapi i18n plugin enabled, `locale` (string) and `localizations` (self-referencing relation) are **automatically included** in generated types. Content types without i18n are not affected.
@@ -112,6 +110,39 @@ If your content type has the Strapi i18n plugin enabled, `locale` (string) and `
 
 ::: tip
 Any attribute marked as `private` in the Strapi schema is automatically excluded from generated types. The `password` type is the most common example.
+:::
+
+## Creator Fields
+
+`createdBy` and `updatedBy` are generated **only for content types that opt in**, because that is exactly what Strapi does. Strapi adds both as relations to `admin::user` and marks them `private: !options.populateCreatorFields` — so with the option off they are stripped from every REST response, and generating them would describe data your backend never sends.
+
+Enable the option in the content type's `schema.json`:
+
+```json
+{
+    "options": {
+        "draftAndPublish": true,
+        "populateCreatorFields": true
+    }
+}
+```
+
+Regenerate, and both fields become populatable like any other relation:
+
+```typescript
+const articles = await strapi.articles.find({
+    populate: { createdBy: true },
+})
+
+articles[0].createdBy?.firstname // string | null
+```
+
+They resolve to `AdminUser`, the sanitized shape Strapi returns — `id`, `firstname`, `lastname`, `username`, `preferedLanguage`, `createdAt`, `updatedAt`. The name avoids colliding with the users-permissions `User`. Admin `email`, `roles` and the token fields stay `private` in Strapi's own schema and are never sent, so they are absent from the type.
+
+Both fields are read-only: Strapi marks them `writable: false`, so they are populatable and filterable but never appear in `*CreateInput` / `*UpdateInput`.
+
+::: info Plugin upgrade required
+This is decided inside Strapi, by the plugin that exposes your schema. Updating only the CLI is not enough — the plugin in your Strapi instance has to be new enough to forward the fields.
 :::
 
 ## Nullable and Optional Behavior

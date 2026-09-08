@@ -27,6 +27,7 @@ import {
     toPascalCase,
     convertComponentName,
     extractComponentCategory,
+    CREATOR_FIELDS,
 } from '../shared/index.js'
 
 import type {
@@ -208,8 +209,14 @@ function processAttribute(
         const target = attr.target || ''
         const relationType = normalizeRelationType(attr.relation || '')
 
-        // Skip admin and non-users-permissions plugin relations
-        if (target.startsWith('admin::')) return null
+        // Skip admin and non-users-permissions plugin relations. The creator
+        // fields are the documented exception — they point at admin::user by
+        // design, and the plugin only forwards them when the content type opted
+        // in via populateCreatorFields.
+        const isCreatorField = (CREATOR_FIELDS as readonly string[]).includes(
+            name,
+        )
+        if (target.startsWith('admin::') && !isCreatorField) return null
         if (
             target.startsWith('plugin::') &&
             !target.includes('users-permissions')
@@ -225,6 +232,7 @@ function processAttribute(
                 target,
                 targetType: extractCleanNameFromUid(target),
                 required,
+                ...(attr.writable === false ? { readOnly: true } : {}),
             },
         }
     }
@@ -385,12 +393,20 @@ function normalizeRelationType(
  * extractCleanNameFromUid('api::item.item') // 'Item'
  * extractCleanNameFromUid('api::guide-type.guide-type') // 'GuideType'
  * extractCleanNameFromUid('plugin::users-permissions.user') // 'User'
+ * extractCleanNameFromUid('admin::user') // 'AdminUser'
  * extractCleanNameFromUid('shared.feature') // 'SharedFeature' (component)
  */
 function extractCleanNameFromUid(uid: string): string {
     // Handle component UIDs (no :: prefix)
     if (!uid.includes('::')) {
         return convertComponentName(uid)
+    }
+
+    // Handle admin types — prefixed so admin::user can't collide with the
+    // users-permissions User the same schema already exports.
+    if (uid.startsWith('admin::')) {
+        const modelName = uid.split('::')[1].split('.').pop() || uid
+        return `Admin${toPascalCase(modelName)}`
     }
 
     // Handle plugin types

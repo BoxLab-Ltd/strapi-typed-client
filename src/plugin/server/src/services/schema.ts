@@ -4,7 +4,7 @@
  */
 
 import { computeSchemaHash } from '../../../../shared/schema-hash.js'
-import { SYSTEM_FIELDS, PRIVATE_FIELDS } from '../../../../shared/constants.js'
+import { SYSTEM_FIELDS, CREATOR_FIELDS } from '../../../../shared/constants.js'
 import type {
     ParsedEndpoint,
     ExtraControllerType,
@@ -36,12 +36,10 @@ export type {
 function filterAttributes(
     attributes: Record<string, StrapiAttribute>,
 ): Record<string, StrapiAttribute> {
-    // Combine system fields (createdAt, updatedAt, publishedAt — added by generator as base fields)
-    // and private fields (createdBy, updatedBy)
-    const systemFields: string[] = [
-        ...SYSTEM_FIELDS.filter(f => f !== 'id' && f !== 'documentId'),
-        ...PRIVATE_FIELDS,
-    ]
+    // createdAt, updatedAt, publishedAt — added by the generator as base fields
+    const systemFields: string[] = SYSTEM_FIELDS.filter(
+        f => f !== 'id' && f !== 'documentId',
+    )
 
     const filtered: Record<string, StrapiAttribute> = {}
 
@@ -56,10 +54,15 @@ function filterAttributes(
             continue
         }
 
-        // Skip admin relations
+        // Skip admin relations — except the creator fields, whose whole point is
+        // to resolve to an admin user. The private check above already gated
+        // them on the content type's populateCreatorFields option.
         if (attr.type === 'relation') {
             const target = attr.target as string
-            if (target?.startsWith('admin::')) {
+            if (
+                target?.startsWith('admin::') &&
+                !(CREATOR_FIELDS as readonly string[]).includes(name)
+            ) {
                 continue
             }
             // Allow users-permissions relations

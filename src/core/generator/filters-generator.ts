@@ -107,6 +107,20 @@ export interface LogicalOperators<T> {
   $or?: T[]
   $not?: T
 }
+
+/** Filters for the admin user behind createdBy / updatedBy */
+export interface AdminUserFilters {
+  id?: number | IdFilterOperators
+  firstname?: string | StringFilterOperators
+  lastname?: string | StringFilterOperators
+  username?: string | StringFilterOperators
+  preferedLanguage?: string | StringFilterOperators
+  createdAt?: string | DateFilterOperators
+  updatedAt?: string | DateFilterOperators
+  $and?: AdminUserFilters[]
+  $or?: AdminUserFilters[]
+  $not?: AdminUserFilters
+}
 `
 }
 

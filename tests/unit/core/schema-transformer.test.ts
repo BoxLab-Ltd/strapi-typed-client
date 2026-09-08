@@ -135,7 +135,7 @@ describe('Schema Transformer', () => {
             expect(categoriesRel!.targetType).toBe('Category')
         })
 
-        it('should skip admin relations', () => {
+        it('should skip admin relations other than the creator fields', () => {
             const extracted: ExtractedSchema = {
                 contentTypes: {
                     'api::post.post': {
@@ -148,10 +148,10 @@ describe('Schema Transformer', () => {
                             displayName: 'Post',
                         },
                         attributes: {
-                            createdBy: {
+                            owningRole: {
                                 type: 'relation',
                                 relation: 'oneToOne',
-                                target: 'admin::user',
+                                target: 'admin::role',
                             },
                         },
                     },
@@ -162,6 +162,55 @@ describe('Schema Transformer', () => {
             const result = transformSchema(extracted)
 
             expect(result.contentTypes[0].relations).toHaveLength(0)
+        })
+
+        it('should keep creator fields the plugin forwarded', () => {
+            const extracted: ExtractedSchema = {
+                contentTypes: {
+                    'api::post.post': {
+                        uid: 'api::post.post',
+                        kind: 'collectionType',
+                        collectionName: 'posts',
+                        info: {
+                            singularName: 'post',
+                            pluralName: 'posts',
+                            displayName: 'Post',
+                        },
+                        attributes: {
+                            // Exactly what Strapi builds when the content type
+                            // sets options.populateCreatorFields.
+                            createdBy: {
+                                type: 'relation',
+                                relation: 'oneToOne',
+                                target: 'admin::user',
+                                writable: false,
+                                private: false,
+                            },
+                            updatedBy: {
+                                type: 'relation',
+                                relation: 'oneToOne',
+                                target: 'admin::user',
+                                writable: false,
+                                private: false,
+                            },
+                        },
+                    },
+                },
+                components: {},
+            }
+
+            const result = transformSchema(extracted)
+            const relations = result.contentTypes[0].relations
+
+            expect(relations.map(r => r.name)).toEqual([
+                'createdBy',
+                'updatedBy',
+            ])
+            // AdminUser, not User — users-permissions already owns that name.
+            expect(relations.every(r => r.targetType === 'AdminUser')).toBe(
+                true,
+            )
+            expect(relations.every(r => r.readOnly === true)).toBe(true)
         })
 
         it('should transform media fields', () => {

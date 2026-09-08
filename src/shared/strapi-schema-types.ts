@@ -16,6 +16,8 @@ export interface StrapiAttribute {
     type: string
     required?: boolean
     private?: boolean
+    // Strapi marks server-managed relations (the creator fields) as not writable.
+    writable?: boolean
     relation?: string
     target?: string
     component?: string

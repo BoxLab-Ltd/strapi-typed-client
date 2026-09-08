@@ -87,6 +87,24 @@ const widget: ContentType = {
             targetType: 'Item',
             required: false,
         },
+        // Creator fields as the transformer emits them for a content type with
+        // options.populateCreatorFields — readable, populatable, never writable.
+        {
+            name: 'createdBy',
+            relationType: 'oneToOne',
+            target: 'admin::user',
+            targetType: 'AdminUser',
+            required: false,
+            readOnly: true,
+        },
+        {
+            name: 'updatedBy',
+            relationType: 'oneToOne',
+            target: 'admin::user',
+            targetType: 'AdminUser',
+            required: false,
+            readOnly: true,
+        },
     ],
     media: [{ name: 'gallery', multiple: true, required: false }],
     components: [
@@ -187,6 +205,18 @@ async function _assert() {
   await client.projects.find({ filters: { sections: { title: { $eq: 'x' } } } })
   // the system timestamps Strapi adds to every document are filterable
   await client.items.find({ filters: { publishedAt: { $notNull: true }, createdAt: { $gte: '2026-01-01' } } })
+  // creator fields populate to the sanitized admin user
+  const w = await client.widgets.find({ populate: { createdBy: true } })
+  const _who: (typeof w)[number]['createdBy'] = null as any
+  void _who
+  const _name: string | null = (await client.widgets.find({ populate: { createdBy: true } }))[0]!.createdBy!.firstname
+  void _name
+  // @ts-expect-error - email is private on admin::user and never returned
+  void (await client.widgets.find({ populate: { createdBy: true } }))[0]!.createdBy!.email
+  // they narrow through the nested populate options too
+  await client.widgets.find({ populate: { updatedBy: { fields: ['username'], filters: { firstname: { $eq: 'a' } } } } })
+  // @ts-expect-error - creator fields are server-managed and rejected on write
+  await client.widgets.create({ status: 'draft', createdBy: 1 })
 }
 void _assert
 `

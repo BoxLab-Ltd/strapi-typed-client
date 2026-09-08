@@ -38,6 +38,7 @@ export interface Relation {
     target: string // e.g., "api::item.item"
     targetType: string // Clean name e.g., "Item"
     required: boolean
+    readOnly?: boolean // Strapi-managed (writable: false) — readable, never in input types
 }
 
 export interface MediaField {

@@ -239,6 +239,21 @@ export interface I18nLocale {
   publishedAt: string | null
 }
 
+/**
+ * The admin user behind \`createdBy\` / \`updatedBy\`, as the content API returns it.
+ * Only the four attributes admin::user leaves non-private survive sanitization —
+ * email, roles and the token fields are private and never sent.
+ */
+export interface AdminUser {
+  id: number
+  firstname: string | null
+  lastname: string | null
+  username: string | null
+  preferedLanguage: string | null
+  createdAt: string
+  updatedAt: string
+}
+
 // Strapi Blocks Editor API Types
 // Based on: https://docs.strapi.io/dev-docs/api/document/blocks
 
@@ -506,7 +521,11 @@ type _ApplyFields<TFull, TBase, TEntry> = TEntry extends true ? TFull : TEntry e
                 hasQuestionToken: true,
             })
         }
+        // Strapi-managed relations (the creator fields) are readable but never
+        // writable — accepting them in an input type would type-check a payload
+        // the backend silently drops.
         for (const rel of type.relations) {
+            if (rel.readOnly) continue
             props.push({
                 name: rel.name,
                 type: 'RelationInput',

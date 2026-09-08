@@ -56,8 +56,8 @@ export type {
 // Constants
 export {
     SYSTEM_FIELDS,
-    PRIVATE_FIELDS,
-    SKIP_FIELDS,
+    CREATOR_FIELDS,
+    ADMIN_USER_TYPE,
     FILTER_OPERATORS,
     RELATION_TYPES,
     CRUD_METHODS,
