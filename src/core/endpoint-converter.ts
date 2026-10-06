@@ -19,6 +19,7 @@ import type {
     ParsedCustomTypes,
     CustomEndpointType,
 } from '../shared/custom-types.js'
+import * as ts from 'typescript'
 import {
     extractPathParams,
     toPascalCasePreserve,
@@ -251,12 +252,11 @@ export function convertEndpointsToCustomTypes(
                 // Generate Response type from response
                 if (endpoint.types.response) {
                     const typeName = `${actionPascal}Response`
-                    // Unwrap { data: ... } wrapper — StrapiClient already does response.data
-                    const unwrappedResponse = unwrapDataWrapper(
+                    const { type: responseType, envelope } = splitDataEnvelope(
                         endpoint.types.response,
                     )
                     namespaceLines.push(
-                        `  export type ${typeName} = ${sanitizeTypeRefs(unwrappedResponse, nsKnown, unresolved)}`,
+                        `  export type ${typeName} = ${sanitizeTypeRefs(responseType, nsKnown, unresolved)}`,
                     )
 
                     // Map handler to output type
@@ -264,6 +264,7 @@ export function convertEndpointsToCustomTypes(
                         handler: endpoint.handler,
                     }
                     existing.outputType = `${namespaceName}.${typeName}`
+                    existing.responseEnvelope = envelope
                     types.set(endpoint.handler, existing)
                 }
             }
@@ -295,39 +296,44 @@ export function convertEndpointsToCustomTypes(
 }
 
 /**
- * Unwrap { data: ... } wrapper from response types.
+ * Decide whether a declared response is a `{ data: T }` envelope. The type
+ * emitted for the method and the runtime unwrap both follow this one answer
+ * (#93), so it is made here and carried to the generator as a flag.
  *
- * Controllers return { data: { ... } } but StrapiClient already
- * does `response.data`, so the type should be the inner content.
+ * Only an object whose sole top-level member is `data` counts: siblings such
+ * as `meta` would be dropped by unwrapping, so such a shape stays as declared.
  *
- * Examples:
- *   '{ data: { url: string } }' → '{ url: string }'
- *   '{ data: { members: Array<...>, maxSeats: number } }' → '{ members: Array<...>, maxSeats: number }'
- *   'void' → 'void'
- *   '{ status: string }' → '{ status: string }' (no data wrapper)
+ *   '{ data: { url: string } }'             → { url: string }, envelope
+ *   '{ url: string }'                       → as-is
+ *   '{ data: X; meta: Y }' / 'void'         → as-is
  */
-function unwrapDataWrapper(responseType: string): string {
+export function splitDataEnvelope(responseType: string): {
+    type: string
+    envelope: boolean
+} {
     const trimmed = responseType.trim()
+    const asIs = { type: trimmed, envelope: false }
 
-    // Match pattern: { data: <content> } where content is the rest
-    // Use balanced braces to find the outer object
-    if (!trimmed.startsWith('{')) return trimmed
+    const source = ts.createSourceFile(
+        'response.ts',
+        `type R = ${trimmed}`,
+        ts.ScriptTarget.Latest,
+    )
+    const alias = source.statements[0]
+    if (!alias || !ts.isTypeAliasDeclaration(alias)) return asIs
+    if (!ts.isTypeLiteralNode(alias.type)) return asIs
 
-    // Check if this is a simple { data: ... } wrapper
-    const dataMatch = trimmed.match(/^\{\s*data\s*:\s*/)
-    if (!dataMatch) return trimmed
-
-    // Extract content after "{ data: "
-    const afterData = trimmed.slice(dataMatch[0].length)
-
-    // Find the matching closing brace for the outer object
-    // We need to remove the last } which closes the outer wrapper
-    if (afterData.endsWith('}')) {
-        const innerContent = afterData.slice(0, -1).trim()
-
-        // Remove trailing semicolons if present
-        return innerContent.replace(/;\s*$/, '').trim()
+    const [member, ...rest] = alias.type.members
+    if (
+        rest.length > 0 ||
+        !member ||
+        !ts.isPropertySignature(member) ||
+        member.questionToken ||
+        !member.type ||
+        member.name.getText(source) !== 'data'
+    ) {
+        return asIs
     }
 
-    return trimmed
+    return { type: member.type.getText(source), envelope: true }
 }

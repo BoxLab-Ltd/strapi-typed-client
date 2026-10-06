@@ -141,10 +141,11 @@ Strapi controllers usually return `{ data: ... }`. The generator strips a **sing
 ```typescript
 response: { data: { url: string } }   // method returns { url: string }
 response: { url: string }             // returned as-is (no wrapper to strip)
+response: { data: Post[]; meta: Meta } // returned as-is (unwrapping would drop meta)
 response: void                        // method returns void
 ```
 
-Only one top-level `{ data: ... }` is unwrapped; nested `data` keys and non-`data` shapes pass through unchanged.
+Only an object whose **sole** top-level member is `data` is unwrapped; siblings such as `meta`, optional `data?`, nested `data` keys and non-`data` shapes pass through unchanged. The declared type and the runtime value always follow the same rule. A route with no `Endpoints` entry is typed `any` and still has its `data` unwrapped.
 
 ## Method signatures
 

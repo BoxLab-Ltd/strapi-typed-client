@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
     convertEndpointsToRoutes,
     convertEndpointsToCustomTypes,
+    splitDataEnvelope,
 } from '../../../src/core/endpoint-converter.js'
 import type {
     ParsedEndpoint,
@@ -179,6 +180,7 @@ describe('convertEndpointsToCustomTypes', () => {
         expect(result.types.get('subscription.status')).toEqual({
             handler: 'subscription.status',
             outputType: 'SubscriptionAPI.StatusResponse',
+            responseEnvelope: false,
         })
     })
 
@@ -452,5 +454,37 @@ describe('convertEndpointsToCustomTypes', () => {
         expect(def).toContain('widget: unknown') // unknown type degraded
         expect(def).not.toMatch(/widget:\s*GenerationView/)
         expect(def).toContain('could not be resolved') // discoverable note
+    })
+})
+
+describe('splitDataEnvelope', () => {
+    it.each([
+        ['{ data: { url: string } }', '{ url: string }'],
+        ['{ data: Array<{ id: number }> }', 'Array<{ id: number }>'],
+        [
+            '{\n  data:\n    { a: string }\n    | null\n}',
+            '{ a: string }\n    | null',
+        ],
+        ['{ data: string; }', 'string'],
+    ])('unwraps a sole data member: %s', (input, inner) => {
+        expect(splitDataEnvelope(input)).toEqual({
+            type: inner,
+            envelope: true,
+        })
+    })
+
+    it.each([
+        '{ jwt: string }',
+        '{ data: { id: number }; meta: { total: number } }',
+        '{ data?: string }',
+        '{ dataset: string }',
+        '{ nested: { data: string } }',
+        'void',
+        'Array<{ data: string }>',
+    ])('leaves anything else as declared: %s', input => {
+        expect(splitDataEnvelope(input)).toEqual({
+            type: input,
+            envelope: false,
+        })
     })
 })

@@ -5,6 +5,7 @@ export interface CustomEndpointType {
     handler: string // e.g., 'team-invitation.create'
     inputType?: string // e.g., 'TeamInvitationAPI.CreateRequest'
     outputType?: string // e.g., 'TeamInvitationAPI.CreateResponse'
+    responseEnvelope?: boolean // declared response was `{ data: outputType }`
 }
 
 /**

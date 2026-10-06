@@ -109,7 +109,12 @@ export class CustomApiGenerator {
             ? `\`\${this.config.baseURL}/api${this.generateStandalonePathExpression(route)}\``
             : `\`\${this.config.baseURL}/api/\${this.endpoint}${this.generatePathExpression(route, endpoint)}\``
 
-        const responseType = `StrapiResponse<${outputType}>`
+        // An undeclared response keeps the historical `.data` unwrap.
+        const unwrapData =
+            !customType?.outputType || !!customType.responseEnvelope
+        const responseType = unwrapData
+            ? `StrapiResponse<${outputType}>`
+            : outputType
         const bodyBlock = hasBody
             ? `    // If data is FormData, use it directly; otherwise JSON stringify
     const body = data instanceof FormData
@@ -134,7 +139,7 @@ export class CustomApiGenerator {
   async ${methodName}(${params}): Promise<${outputType}> {
     const url = ${urlExpression}
 ${bodyBlock}
-    return response.data
+    return ${unwrapData ? 'response.data' : 'response'}
   }`
     }
 
