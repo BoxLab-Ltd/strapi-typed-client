@@ -6,7 +6,8 @@ import { createApiClient } from '../utils/api-client.js'
 import type { Command } from 'commander'
 import { readLocalSchemaHash, requireOutputDir } from '../utils/file-writer.js'
 import { SseConnection } from '../../shared/sse-client.js'
-import { generate } from './generate.js'
+import { generate, isValidationMode } from './generate.js'
+import type { ValidationMode } from '../../shared/client-header.js'
 
 export interface WatchOptions {
     url?: string
@@ -15,6 +16,7 @@ export interface WatchOptions {
     silent?: boolean
     format?: 'js' | 'ts'
     typecheck?: boolean
+    validation?: ValidationMode
 }
 
 /**
@@ -40,18 +42,23 @@ export async function watch(options: WatchOptions): Promise<void> {
         process.exit(1)
     }
 
-    // Initial generation if no types exist
-    const initialHash = readLocalSchemaHash(outputDir)
-    if (!initialHash) {
+    // Always reconcile once at startup: the SSE path only reacts to a hash
+    // change, so a new --format/--validation or a generator upgrade would
+    // otherwise never reach an existing tree. Unforced, so a fresh tree is kept.
+    if (!readLocalSchemaHash(outputDir)) {
         console.log('No existing types found. Generating initial types...')
-        await generate({
-            url: options.url,
-            token: options.token,
-            output: outputDir,
-            silent: options.silent,
-            format: options.format,
-            typecheck: options.typecheck,
-        })
+    }
+    const initial = await generate({
+        url: options.url,
+        token: options.token,
+        output: outputDir,
+        silent: options.silent,
+        format: options.format,
+        typecheck: options.typecheck,
+        validation: options.validation,
+    })
+    if (!initial.success) {
+        console.error('Failed to generate types:', initial.error)
     }
 
     let lastHash = readLocalSchemaHash(outputDir)
@@ -83,6 +90,7 @@ export async function watch(options: WatchOptions): Promise<void> {
                         silent: true,
                         format: options.format,
                         typecheck: options.typecheck,
+                        validation: options.validation,
                     })
 
                     if (result.success) {
@@ -135,6 +143,7 @@ interface WatchCliOptions {
     silent?: boolean
     format?: string
     typecheck?: boolean
+    validation?: string
 }
 
 /**
@@ -167,10 +176,20 @@ export function createWatchCommand(program: Command): void {
             '--no-typecheck',
             'Write regenerated types even if they fail type-checking (escape hatch for strict-only false positives)',
         )
+        .option(
+            '--validation <zod|none>',
+            'Also generate Zod validators for create/update inputs (needs zod 4 installed). Defaults to the mode already in --output, else none',
+        )
         .action(async (opts: WatchCliOptions) => {
             if (opts.format && opts.format !== 'js' && opts.format !== 'ts') {
                 console.error(
                     `Invalid --format value: ${opts.format}. Expected 'js' or 'ts'.`,
+                )
+                process.exit(1)
+            }
+            if (!isValidationMode(opts.validation)) {
+                console.error(
+                    `Invalid --validation value: ${opts.validation}. Expected 'zod' or 'none'.`,
                 )
                 process.exit(1)
             }
@@ -183,6 +202,7 @@ export function createWatchCommand(program: Command): void {
                     silent: opts.silent,
                     format: opts.format as 'js' | 'ts' | undefined,
                     typecheck: opts.typecheck,
+                    validation: opts.validation,
                 })
             } catch (err) {
                 console.error((err as Error).message)

@@ -20,6 +20,7 @@ import {
     convertEndpointsToRoutes,
     convertEndpointsToCustomTypes,
 } from '../core/endpoint-converter.js'
+import type { ValidationMode } from '../shared/client-header.js'
 
 // Inlined copy of templates/stringify-query.ts (the qs-contract-tested source) embedded raw so type annotations survive `--format ts`; a drift-guard test keeps the two in sync.
 export const STRINGIFY_QUERY_SOURCE = `function stringifyQuery(obj: Record<string, unknown>): string {
@@ -77,6 +78,7 @@ export class ClientGenerator {
         schemaHash: string = '',
         generatorVersion: string = '',
         authMode: AuthMode = 'legacy',
+        validation: ValidationMode = 'none',
     ): string {
         const project = new Project({ useInMemoryFileSystem: true })
         const sf = project.createSourceFile('client.ts')
@@ -117,6 +119,8 @@ export class ClientGenerator {
             `export const GENERATOR_VERSION = ${JSON.stringify(generatorVersion)}`,
             // Union-typed so `config.authMode ?? AUTH_MODE` doesn't narrow to the baked literal
             `export const AUTH_MODE: 'legacy' | 'refresh' = ${JSON.stringify(authMode)}`,
+            // No type annotation: readClientHeaderConst matches `NAME = "value"`
+            `export const VALIDATION = ${JSON.stringify(validation)}`,
         ])
 
         // Imports

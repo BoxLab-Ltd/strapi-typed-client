@@ -397,6 +397,34 @@ describe('generated Zod validators', () => {
         )
     })
 
+    it('keeps a single locale key on an i18n content type', async () => {
+        const i18nDir = repoTmpDir('validation-i18n-')
+        try {
+            await new Generator(i18nDir).generate(
+                {
+                    contentTypes: [
+                        ...mockSchema.contentTypes,
+                        {
+                            ...probe,
+                            attributes: [
+                                ...probe.attributes,
+                                {
+                                    name: 'locale',
+                                    type: { kind: 'string' },
+                                    required: false,
+                                },
+                            ],
+                        },
+                    ],
+                    components: schema.components,
+                },
+                { format: 'ts', validation: 'zod' },
+            )
+        } finally {
+            fs.rmSync(i18nDir, { recursive: true, force: true })
+        }
+    })
+
     it('never injects values the caller did not send', () => {
         expect(v.ProbeCreateInputSchema.parse(ok)).toEqual(ok)
     })

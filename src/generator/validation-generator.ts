@@ -10,9 +10,7 @@ import {
     type InputField,
     type InputMode,
 } from './input-fields.js'
-
-/** First line of every validation file — only files carrying it are ours to overwrite or delete. */
-export const VALIDATION_FILE_MARKER = '// Auto-generated Strapi validators'
+import { VALIDATION_FILE_MARKER } from '../shared/client-header.js'
 
 const MODES: readonly InputMode[] = ['Create', 'Update']
 

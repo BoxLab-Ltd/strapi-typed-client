@@ -10,7 +10,14 @@ import {
     readLocalGeneratorVersion,
     requireOutputDir,
 } from '../utils/file-writer.js'
+import * as fs from 'fs'
+import * as path from 'path'
 import { getGeneratorVersion } from '../../shared/version.js'
+import {
+    detectOutputFormat,
+    readValidationMode,
+    validationFileNames,
+} from '../../shared/client-header.js'
 
 export interface CheckOptions {
     url?: string
@@ -42,6 +49,23 @@ export async function check(options: CheckOptions): Promise<CheckResult> {
                 localHash: null,
                 remoteHash: null,
                 error: `No generated client found in ${outputDir}. Run 'strapi-types generate' first.`,
+            }
+        }
+
+        // The stamped mode promises validators; a deleted file is out of sync
+        // even when the schema hash matches.
+        if (readValidationMode(outputDir) === 'zod') {
+            const format = detectOutputFormat(outputDir) ?? 'js'
+            const missing = validationFileNames(format).filter(
+                f => !fs.existsSync(path.join(outputDir, f)),
+            )
+            if (missing.length > 0) {
+                return {
+                    inSync: false,
+                    localHash,
+                    remoteHash: null,
+                    error: `Generated with --validation zod, but ${missing.join(', ')} is missing in ${outputDir}. Run 'strapi-types generate' to restore it.`,
+                }
             }
         }
 

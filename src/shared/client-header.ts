@@ -83,3 +83,29 @@ export function detectOutputFormat(outputDir: string): 'js' | 'ts' | null {
 export function hasMixedFormatOutput(outputDir: string): boolean {
     return CLIENT_FILES.every(file => fs.existsSync(path.join(outputDir, file)))
 }
+
+export type ValidationMode = 'zod' | 'none'
+
+/** First line of every generated validation file — only files carrying it are ours to overwrite or delete. */
+export const VALIDATION_FILE_MARKER = '// Auto-generated Strapi validators'
+
+export function validationFileNames(format: 'js' | 'ts'): string[] {
+    return format === 'ts'
+        ? ['validation.ts']
+        : ['validation.js', 'validation.d.ts']
+}
+
+/**
+ * The mode stamped into the client header. Deliberately not inferred from a
+ * validation file's presence: in a committed source dir that name may be the
+ * consumer's own file. Null for clients generated before the stamp existed.
+ */
+export function readValidationMode(outputDir: string): ValidationMode | null {
+    const mode = readClientHeaderConst(outputDir, 'VALIDATION')
+    return mode === 'zod' || mode === 'none' ? mode : null
+}
+
+export function isGeneratedValidationFile(filePath: string): boolean {
+    const head = readFileHead(filePath, VALIDATION_FILE_MARKER.length + 4)
+    return head !== null && head.trimStart().startsWith(VALIDATION_FILE_MARKER)
+}

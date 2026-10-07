@@ -14,6 +14,9 @@ import * as path from 'path'
 import {
     detectOutputFormat,
     readClientHeaderConst,
+    readValidationMode,
+    validationFileNames,
+    type ValidationMode,
 } from '../shared/client-header.js'
 import { getGeneratorVersion } from '../shared/version.js'
 
@@ -24,6 +27,8 @@ export interface StrapiTypesConfig {
     format?: 'js' | 'ts'
     output?: string
     typecheck?: boolean
+    /** Also generate Zod validators (`validation.ts`); needs zod 4 installed. Defaults to the mode already in `output`. */
+    validation?: ValidationMode
 }
 
 const _require = createRequire(import.meta.url)
@@ -50,11 +55,17 @@ export function resolveOutputDir(config: StrapiTypesConfig): string {
     return path.resolve(process.cwd(), config.output.trim())
 }
 
-function generatedFilesExist(outputDir: string, format: 'js' | 'ts'): boolean {
-    const files =
-        format === 'ts'
+function generatedFilesExist(
+    outputDir: string,
+    format: 'js' | 'ts',
+    validation: ValidationMode,
+): boolean {
+    const files = [
+        ...(format === 'ts'
             ? ['types.ts', 'client.ts', 'index.ts']
-            : ['types.d.ts', 'client.d.ts', 'index.d.ts']
+            : ['types.d.ts', 'client.d.ts', 'index.d.ts']),
+        ...(validation === 'zod' ? validationFileNames(format) : []),
+    ]
     return files.every(f => fs.existsSync(path.join(outputDir, f)))
 }
 
@@ -94,6 +105,8 @@ async function startDevWatch(config: StrapiTypesConfig): Promise<void> {
     const outputDir = resolveOutputDir(config)
     const format: 'js' | 'ts' =
         config.format ?? detectOutputFormat(outputDir) ?? 'js'
+    const localValidation = readValidationMode(outputDir)
+    const validation = config.validation ?? localValidation ?? 'none'
     const silent = config.silent ?? false
     const url =
         config.strapiUrl || process.env.STRAPI_URL || 'http://localhost:1337'
@@ -123,8 +136,11 @@ async function startDevWatch(config: StrapiTypesConfig): Promise<void> {
         )
     }
 
+    const validationChanged = (localValidation ?? 'none') !== validation
     let lastHash =
-        !versionStale && generatedFilesExist(outputDir, format)
+        !versionStale &&
+        !validationChanged &&
+        generatedFilesExist(outputDir, format, validation)
             ? readClientHeaderConst(outputDir, 'SCHEMA_HASH')
             : null
     let generating = false
@@ -142,7 +158,7 @@ async function startDevWatch(config: StrapiTypesConfig): Promise<void> {
 
                 if (
                     lastHash !== remoteHash ||
-                    !generatedFilesExist(outputDir, format)
+                    !generatedFilesExist(outputDir, format, validation)
                 ) {
                     generating = true
                     const stop = loading(silent, 'Regenerating types')
@@ -156,6 +172,7 @@ async function startDevWatch(config: StrapiTypesConfig): Promise<void> {
                         force: true,
                         format,
                         typecheck: config.typecheck,
+                        validation,
                     })
 
                     stop()
@@ -196,6 +213,8 @@ function runBuildGenerate(config: StrapiTypesConfig): void {
     const outputDir = resolveOutputDir(config)
     const format: 'js' | 'ts' =
         config.format ?? detectOutputFormat(outputDir) ?? 'js'
+    const validation =
+        config.validation ?? readValidationMode(outputDir) ?? 'none'
     const binPath = path.join(getPackageDir(), 'dist', 'cli', 'index.js')
 
     const args = [
@@ -209,6 +228,8 @@ function runBuildGenerate(config: StrapiTypesConfig): void {
         url,
         '--format',
         format,
+        '--validation',
+        validation,
     ]
 
     if (config.typecheck === false) {

@@ -23,6 +23,7 @@ export interface InitOptions {
     url?: string
     output?: string
     format?: string
+    validation?: string
     yes?: boolean
     force?: boolean
     silent?: boolean
@@ -114,6 +115,7 @@ export interface InitScriptValues {
     output: string
     format: 'js' | 'ts'
     url?: string
+    validation?: 'zod' | 'none'
 }
 
 export function buildInitScripts(
@@ -124,8 +126,9 @@ export function buildInitScripts(
     const output = ` --output ${arg(values.output)}`
     const format = values.format === 'ts' ? ' --format ts' : ''
     const url = values.url ? ` --url ${arg(values.url)}` : ''
+    const validation = values.validation === 'zod' ? ' --validation zod' : ''
     return {
-        'strapi:generate': `strapi-types generate${output}${format}${url}`,
+        'strapi:generate': `strapi-types generate${output}${format}${validation}${url}`,
         'strapi:check': `strapi-types check${output}${url}`,
     }
 }
@@ -293,19 +296,36 @@ async function askUrl(prompter: Prompter): Promise<string | undefined> {
 
 function detectPackageManager(pkg: Record<string, unknown>): {
     install: string
+    add: string
     run: (script: string) => string
 } {
     const pm = typeof pkg.packageManager === 'string' ? pkg.packageManager : ''
     if (pm.startsWith('yarn')) {
-        return { install: 'yarn add -D', run: s => `yarn ${s}` }
+        return {
+            install: 'yarn add -D',
+            add: 'yarn add',
+            run: s => `yarn ${s}`,
+        }
     }
     if (pm.startsWith('pnpm')) {
-        return { install: 'pnpm add -D', run: s => `pnpm ${s}` }
+        return {
+            install: 'pnpm add -D',
+            add: 'pnpm add',
+            run: s => `pnpm ${s}`,
+        }
     }
     if (pm.startsWith('bun')) {
-        return { install: 'bun add -d', run: s => `bun run ${s}` }
+        return {
+            install: 'bun add -d',
+            add: 'bun add',
+            run: s => `bun run ${s}`,
+        }
     }
-    return { install: 'npm install -D', run: s => `npm run ${s}` }
+    return {
+        install: 'npm install -D',
+        add: 'npm install',
+        run: s => `npm run ${s}`,
+    }
 }
 
 function hasDependency(pkg: Record<string, unknown>, name: string): boolean {
@@ -316,11 +336,19 @@ function hasDependency(pkg: Record<string, unknown>, name: string): boolean {
     return false
 }
 
-function printNextSteps(pkg: Record<string, unknown>, output: string): void {
+function printNextSteps(
+    pkg: Record<string, unknown>,
+    output: string,
+    validation: 'zod' | 'none',
+): void {
     const pm = detectPackageManager(pkg)
     const steps: string[] = []
     if (!hasDependency(pkg, 'strapi-typed-client')) {
         steps.push(`Install the package: ${pm.install} strapi-typed-client`)
+    }
+    // A runtime dependency: the validators run in the app, not at build time
+    if (validation === 'zod' && !hasDependency(pkg, 'zod')) {
+        steps.push(`Install zod 4 for the validators: ${pm.add} zod`)
     }
     steps.push(
         `Enable the plugin in your Strapi project: config/plugins.ts → 'strapi-typed-client': { enabled: true }`,
@@ -410,6 +438,16 @@ export async function init(
         }
         format = value
     }
+    if (
+        options.validation !== undefined &&
+        options.validation !== 'zod' &&
+        options.validation !== 'none'
+    ) {
+        return fail(
+            `Invalid --validation value: ${options.validation}. Expected 'zod' or 'none'.`,
+        )
+    }
+    const validation = options.validation ?? 'none'
 
     const wantsPrompt = !options.yes && !options.silent
     const canPrompt =
@@ -463,7 +501,12 @@ export async function init(
         )
     }
 
-    const scripts = buildInitScripts({ output, format, url: scriptUrl })
+    const scripts = buildInitScripts({
+        output,
+        format,
+        url: scriptUrl,
+        validation,
+    })
     let applied: ApplyScriptsResult
     try {
         applied = applyScriptsToPackageJson(
@@ -512,6 +555,7 @@ export async function init(
         printNextSteps(
             JSON.parse(stripBom(raw)) as Record<string, unknown>,
             output,
+            validation,
         )
     }
 
@@ -529,6 +573,7 @@ interface InitCliOptions {
     url?: string
     output?: string
     format?: string
+    validation?: string
     yes?: boolean
     force?: boolean
     silent?: boolean
@@ -554,6 +599,10 @@ export function createInitCommand(program: Command): void {
         .option(
             '--format <js|ts>',
             'Output format: js (compiled .js + .d.ts, default) or ts (raw .ts for bundlers/monorepos)',
+        )
+        .option(
+            '--validation <zod|none>',
+            'Also generate Zod validators for create/update inputs (needs zod 4 in your dependencies)',
         )
         .option(
             '-y, --yes',

@@ -80,8 +80,12 @@ export function inputFields(
             componentTypes: dz.componentTypes,
         })
     }
-    if (isContentType) {
+    // i18n content types already carry `locale` as an attribute
+    const taken = new Set(fields.map(f => f.name))
+    if (isContentType && !taken.has('locale')) {
         fields.push({ name: 'locale', optional: true, kind: 'locale' })
+    }
+    if (isContentType && !taken.has('publishedAt')) {
         fields.push({
             name: 'publishedAt',
             optional: true,

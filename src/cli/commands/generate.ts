@@ -17,6 +17,9 @@ import { transformSchema } from '../../core/schema-transformer.js'
 import {
     detectOutputFormat,
     hasMixedFormatOutput,
+    readValidationMode,
+    validationFileNames,
+    type ValidationMode,
 } from '../../shared/client-header.js'
 import { getGeneratorVersion } from '../../shared/version.js'
 
@@ -28,6 +31,7 @@ export interface GenerateOptions {
     force?: boolean
     format?: 'js' | 'ts'
     typecheck?: boolean
+    validation?: ValidationMode
 }
 
 const dim = (s: string): string => `\x1b[2m${s}\x1b[0m`
@@ -52,13 +56,39 @@ export function isGeneratedOutputFresh(params: {
     localVersion: string | null
     cliVersion: string
     allFilesExist: boolean
+    localValidation?: ValidationMode | null
+    validation?: ValidationMode
 }): boolean {
     const { localHash, remoteHash, localVersion, cliVersion, allFilesExist } =
         params
     if (!localHash || !allFilesExist) return false
     if (localHash !== remoteHash) return false
     if (localVersion !== cliVersion) return false
+    if ((params.localValidation ?? 'none') !== (params.validation ?? 'none')) {
+        return false
+    }
     return true
+}
+
+/** Files a generation in this format and validation mode leaves in the output dir. */
+export function generatedFileNames(
+    format: 'js' | 'ts',
+    validation: ValidationMode,
+): string[] {
+    const base =
+        format === 'ts'
+            ? ['types.ts', 'client.ts', 'index.ts']
+            : [
+                  'types.js',
+                  'types.d.ts',
+                  'client.js',
+                  'client.d.ts',
+                  'index.js',
+                  'index.d.ts',
+              ]
+    return validation === 'zod'
+        ? [...base, ...validationFileNames(format)]
+        : base
 }
 
 /**
@@ -74,6 +104,9 @@ export async function generate(
         const format: 'js' | 'ts' =
             options.format ?? detectOutputFormat(outputDir) ?? 'js'
         assertOutputDirForFormat(outputDir, format)
+        const localValidation = readValidationMode(outputDir)
+        const validation: ValidationMode =
+            options.validation ?? localValidation ?? 'none'
 
         if (!options.silent && hasMixedFormatOutput(outputDir)) {
             console.log(
@@ -100,11 +133,9 @@ export async function generate(
             const cliVersion = getGeneratorVersion()
 
             // Verify generated files actually exist (they may be lost after package update)
-            const generatedFiles = (
-                format === 'ts'
-                    ? ['types.ts', 'client.ts', 'index.ts']
-                    : ['types.d.ts', 'client.d.ts', 'index.d.ts']
-            ).map(f => path.join(outputDir, f))
+            const generatedFiles = generatedFileNames(format, validation).map(
+                f => path.join(outputDir, f),
+            )
             const allFilesExist = generatedFiles.every(f => fs.existsSync(f))
 
             if (localHash && allFilesExist) {
@@ -122,6 +153,8 @@ export async function generate(
                             localVersion,
                             cliVersion,
                             allFilesExist,
+                            localValidation,
+                            validation,
                         })
                     ) {
                         if (!options.silent) {
@@ -141,6 +174,10 @@ export async function generate(
                         if (localHash !== remoteHash) {
                             console.log(
                                 `Schema changed (${localHash.substring(0, 8)}... -> ${remoteHash.substring(0, 8)}...)`,
+                            )
+                        } else if (localVersion === cliVersion) {
+                            console.log(
+                                `Validation changed (${localValidation ?? 'none'} -> ${validation}), regenerating...`,
                             )
                         } else {
                             console.log(
@@ -219,21 +256,10 @@ export async function generate(
             format,
             typecheck: options.typecheck ?? true,
             authMode: authMode ?? 'legacy',
+            validation,
         })
 
-        // Track generated files
-        const emittedFiles =
-            format === 'ts'
-                ? ['types.ts', 'client.ts', 'index.ts']
-                : [
-                      'types.js',
-                      'types.d.ts',
-                      'client.js',
-                      'client.d.ts',
-                      'index.js',
-                      'index.d.ts',
-                  ]
-        for (const f of emittedFiles) {
+        for (const f of generatedFileNames(format, validation)) {
             filesWritten.push(path.join(outputDir, f))
         }
 
@@ -269,6 +295,7 @@ interface GenerateCliOptions {
     force?: boolean
     format?: string
     typecheck?: boolean
+    validation?: string
 }
 
 /**
@@ -300,10 +327,20 @@ export function createGenerateCommand(program: Command): void {
             '--no-typecheck',
             'Write the generated client even if it fails type-checking (escape hatch for strict-only false positives)',
         )
+        .option(
+            '--validation <zod|none>',
+            'Also generate Zod validators for create/update inputs (needs zod 4 installed). Defaults to the mode already in --output, else none',
+        )
         .action(async (opts: GenerateCliOptions) => {
             if (opts.format && opts.format !== 'js' && opts.format !== 'ts') {
                 console.error(
                     `Invalid --format value: ${opts.format}. Expected 'js' or 'ts'.`,
+                )
+                process.exit(1)
+            }
+            if (!isValidationMode(opts.validation)) {
+                console.error(
+                    `Invalid --validation value: ${opts.validation}. Expected 'zod' or 'none'.`,
                 )
                 process.exit(1)
             }
@@ -316,6 +353,7 @@ export function createGenerateCommand(program: Command): void {
                 force: opts.force,
                 format: opts.format as 'js' | 'ts' | undefined,
                 typecheck: opts.typecheck,
+                validation: opts.validation,
             })
 
             if (!result.success) {
@@ -332,4 +370,10 @@ export function createGenerateCommand(program: Command): void {
                 }
             }
         })
+}
+
+export function isValidationMode(
+    value: string | undefined,
+): value is ValidationMode | undefined {
+    return value === undefined || value === 'zod' || value === 'none'
 }
