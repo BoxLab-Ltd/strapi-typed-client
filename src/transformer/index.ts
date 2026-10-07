@@ -5,8 +5,12 @@ export class TypeTransformer {
     /**
      * Converts Strapi attribute type to TypeScript type string
      */
-    toTypeScript(attrType: AttributeType, required: boolean): string {
-        let tsType = this.getBaseType(attrType)
+    toTypeScript(
+        attrType: AttributeType,
+        required: boolean,
+        mode: 'read' | 'input' = 'read',
+    ): string {
+        let tsType = this.getBaseType(attrType, mode)
 
         if (!required && !this.isAlwaysRequired(attrType)) {
             tsType += ' | null'
@@ -15,7 +19,10 @@ export class TypeTransformer {
         return tsType
     }
 
-    private getBaseType(attrType: AttributeType): string {
+    private getBaseType(
+        attrType: AttributeType,
+        mode: 'read' | 'input',
+    ): string {
         switch (attrType.kind) {
             case 'string':
             case 'text':
@@ -26,8 +33,11 @@ export class TypeTransformer {
             case 'blocks':
                 return 'BlocksContent'
 
-            case 'integer':
+            // Strapi returns bigintegers as strings and accepts either on input
             case 'biginteger':
+                return mode === 'input' ? 'string | number' : 'string'
+
+            case 'integer':
             case 'float':
             case 'decimal':
                 return 'number'

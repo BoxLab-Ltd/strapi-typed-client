@@ -144,7 +144,7 @@ describe('filters-generator', () => {
         it('generates enumeration filters with values', () => {
             const result = generateEntityFilters(mockContentType)
             expect(result).toContain(
-                "status?: ('draft' | 'published' | 'archived') | StringFilterOperators",
+                'status?: ("draft" | "published" | "archived") | StringFilterOperators',
             )
         })
 

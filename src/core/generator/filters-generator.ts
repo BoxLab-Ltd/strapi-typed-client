@@ -54,6 +54,21 @@ export interface NumberFilterOperators {
   $notNull?: boolean
 }
 
+/** biginteger filter operators — Strapi reads bigintegers as strings, accepts either */
+export interface BigIntFilterOperators {
+  $eq?: string | number
+  $ne?: string | number
+  $lt?: string | number
+  $lte?: string | number
+  $gt?: string | number
+  $gte?: string | number
+  $in?: (string | number)[]
+  $notIn?: (string | number)[]
+  $between?: [string | number, string | number]
+  $null?: boolean
+  $notNull?: boolean
+}
+
 /** Boolean filter operators */
 export interface BooleanFilterOperators {
   $eq?: boolean
@@ -93,7 +108,7 @@ export type RelationFilter<T> = {
   documentId?: string | StringFilterOperators
 } & {
   [K in keyof T]?: T[K] extends string
-    ? string | StringFilterOperators
+    ? string | StringFilterOperators | BigIntFilterOperators
     : T[K] extends number
     ? number | NumberFilterOperators
     : T[K] extends boolean
@@ -140,10 +155,12 @@ function getFilterTypeForAttribute(attr: Attribute): string {
             return 'string | StringFilterOperators'
 
         case 'integer':
-        case 'biginteger':
         case 'float':
         case 'decimal':
             return 'number | NumberFilterOperators'
+
+        case 'biginteger':
+            return 'string | number | BigIntFilterOperators'
 
         case 'boolean':
             return 'boolean | BooleanFilterOperators'
@@ -154,7 +171,8 @@ function getFilterTypeForAttribute(attr: Attribute): string {
             return 'string | DateFilterOperators'
 
         case 'enumeration': {
-            const enumValues = type.values.map(v => `'${v}'`).join(' | ')
+            const enumValues =
+                type.values.map(v => JSON.stringify(v)).join(' | ') || 'never'
             return `(${enumValues}) | StringFilterOperators`
         }
 

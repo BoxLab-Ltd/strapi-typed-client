@@ -4,22 +4,22 @@ This page is a comprehensive reference for how Strapi schema types are converted
 
 ## Scalar Type Mapping
 
-| Strapi Type  | TypeScript Type | Notes                                |
-| ------------ | --------------- | ------------------------------------ |
-| `string`     | `string`        | Short text field                     |
-| `text`       | `string`        | Long text field                      |
-| `richtext`   | `string`        | Markdown rich text (Strapi v4 style) |
-| `email`      | `string`        | Email field                          |
-| `uid`        | `string`        | Unique identifier field              |
-| `integer`    | `number`        |                                      |
-| `biginteger` | `number`        |                                      |
-| `float`      | `number`        |                                      |
-| `decimal`    | `number`        |                                      |
-| `boolean`    | `boolean`       |                                      |
-| `date`       | `string`        | ISO date string (`YYYY-MM-DD`)       |
-| `datetime`   | `string`        | ISO datetime string                  |
-| `time`       | `string`        | Time string (`HH:mm:ss`)             |
-| `json`       | `unknown`       | Arbitrary JSON data                  |
+| Strapi Type  | TypeScript Type | Notes                                                                             |
+| ------------ | --------------- | --------------------------------------------------------------------------------- |
+| `string`     | `string`        | Short text field                                                                  |
+| `text`       | `string`        | Long text field                                                                   |
+| `richtext`   | `string`        | Markdown rich text (Strapi v4 style)                                              |
+| `email`      | `string`        | Email field                                                                       |
+| `uid`        | `string`        | Unique identifier field                                                           |
+| `integer`    | `number`        |                                                                                   |
+| `biginteger` | `string`        | Strapi returns it as a string to keep precision; inputs accept `string \| number` |
+| `float`      | `number`        |                                                                                   |
+| `decimal`    | `number`        |                                                                                   |
+| `boolean`    | `boolean`       |                                                                                   |
+| `date`       | `string`        | ISO date string (`YYYY-MM-DD`)                                                    |
+| `datetime`   | `string`        | ISO datetime string                                                               |
+| `time`       | `string`        | Time string (`HH:mm:ss`)                                                          |
+| `json`       | `unknown`       | Arbitrary JSON data                                                               |
 
 ## Complex Type Mapping
 

@@ -433,12 +433,12 @@ type _ApplyFields<TFull, TBase, TEntry> = TEntry extends true ? TFull : TEntry e
     ): void {
         const entries = [
             ...leading,
-            ...attributes
-                .filter(a => a.defaultValue !== undefined)
-                .map(
-                    a =>
-                        `${safeKey(a.name)}: ${JSON.stringify(a.defaultValue)}`,
-                ),
+            ...attributes.flatMap(a => {
+                const literal = defaultLiteral(a)
+                return literal === undefined
+                    ? []
+                    : [`${safeKey(a.name)}: ${literal}`]
+            }),
         ]
         if (entries.length === 0) return
         sf.addStatements(
@@ -537,7 +537,11 @@ type _ApplyFields<TFull, TBase, TEntry> = TEntry extends true ? TFull : TEntry e
             const hasDefault = attr.defaultValue !== undefined
             props.push({
                 name: attr.name,
-                type: this.transformer.toTypeScript(attr.type, attr.required),
+                type: this.transformer.toTypeScript(
+                    attr.type,
+                    attr.required,
+                    'input',
+                ),
                 hasQuestionToken:
                     mode === 'Update' || !attr.required || hasDefault,
                 ...this.docsFor(attr),
@@ -991,4 +995,19 @@ ${perFieldPop}
 
         return false
     }
+}
+
+const NUMERIC_KINDS = new Set(['integer', 'float', 'decimal'])
+
+// The content-type builder can store numeric defaults as strings ("0"), which
+// would fail the `satisfies Partial<*CreateInput>` check and abort generation.
+function defaultLiteral(attr: Attribute): string | undefined {
+    const value = attr.defaultValue
+    if (value === undefined) return undefined
+    if (attr.type.kind === 'biginteger') return JSON.stringify(String(value))
+    if (NUMERIC_KINDS.has(attr.type.kind) && typeof value === 'string') {
+        const n = Number(value)
+        return value.trim() !== '' && Number.isFinite(n) ? String(n) : undefined
+    }
+    return JSON.stringify(value)
 }

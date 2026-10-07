@@ -886,4 +886,87 @@ describe('TypesGenerator', () => {
             )
         })
     })
+
+    describe('biginteger and schema defaults', () => {
+        const sliceInterface = (src: string, header: string): string => {
+            const start = src.indexOf(header)
+            if (start === -1) return ''
+            const next = src.indexOf('\nexport ', start + header.length)
+            return src.slice(start, next === -1 ? undefined : next)
+        }
+
+        const schema: ParsedSchema = {
+            contentTypes: [
+                {
+                    name: 'ApiCounterCounter',
+                    cleanName: 'Counter',
+                    collectionName: 'counters',
+                    singularName: 'counter',
+                    pluralName: 'counters',
+                    kind: 'collection',
+                    attributes: [
+                        {
+                            name: 'total',
+                            type: { kind: 'biginteger' },
+                            required: true,
+                            defaultValue: '0',
+                        },
+                        {
+                            name: 'step',
+                            type: { kind: 'integer' },
+                            required: false,
+                            defaultValue: '5',
+                        },
+                        {
+                            name: 'ratio',
+                            type: { kind: 'decimal' },
+                            required: false,
+                            defaultValue: 'abc',
+                        },
+                        {
+                            name: 'kind',
+                            type: { kind: 'enumeration', values: ["it's"] },
+                            required: false,
+                        },
+                    ],
+                    relations: [],
+                    media: [],
+                    components: [],
+                    dynamicZones: [],
+                },
+            ],
+            components: [],
+        }
+
+        const out = new TypesGenerator().generate(schema)
+
+        it('reads a biginteger as the string Strapi returns', () => {
+            expect(sliceInterface(out, 'export interface Counter {')).toContain(
+                'total: string;',
+            )
+        })
+
+        it('accepts a biginteger as a string or a number on input', () => {
+            expect(
+                sliceInterface(out, 'export interface CounterCreateInput {'),
+            ).toContain('total?: string | number;')
+        })
+
+        it('normalizes numeric-string defaults and drops ones that cannot fit', () => {
+            expect(out).toContain(
+                'export const CounterDefaults = { total: "0", step: 5 } as const satisfies Partial<CounterCreateInput>',
+            )
+        })
+
+        it('filters a biginteger with range operators over strings or numbers', () => {
+            expect(out).toContain('export interface BigIntFilterOperators {')
+            expect(out).toContain(
+                'total?: string | number | BigIntFilterOperators',
+            )
+        })
+
+        it('escapes enumeration literals in filters', () => {
+            expect(out).toContain(`kind?: ("it's") | StringFilterOperators`)
+        })
+    })
 })
