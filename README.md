@@ -79,6 +79,24 @@ articles[0].category.name // fully typed
 - Schema hashing — skips regeneration when nothing changed
 - Framework-agnostic — works with any TypeScript project
 
+## Runtime validation (Zod)
+
+Add `--validation zod` and the generator also writes `validation.ts`: a [Zod 4](https://zod.dev) schema for every create/update input, generated from the same model as the TS types, so the two can't drift. Install `zod` in your app first:
+
+```bash
+npm install zod
+npx strapi-types generate --output ./src/strapi --validation zod
+```
+
+```typescript
+import { ArticleCreateInputSchema } from '@/strapi/validation'
+
+const parsed = ArticleCreateInputSchema.safeParse(formData)
+if (parsed.success) await strapi.articles.create(parsed.data)
+```
+
+The rules mirror what a live Strapi 5 actually enforces — required fields, lengths, ranges, patterns, enumerations, unknown keys, dynamic-zone blocks — so it rejects payloads Strapi would reject for their shape; what it can't know, like a `unique` value already taken or a missing relation target, still comes back from Strapi. Later runs keep the mode, and the schemas stay out of the client barrel so zod never lands in a bundle that doesn't import them. See [Runtime validation](https://boxlab-ltd.github.io/strapi-typed-client/guide/input-types#runtime-validation-zod).
+
 ## Session auth (Strapi 5.43+)
 
 When your backend runs users-permissions with `jwtManagement: 'refresh'` (short-lived access JWT + rotating refresh token in an httpOnly cookie), the generator detects it automatically and bakes the session flow into the client — no config needed:
