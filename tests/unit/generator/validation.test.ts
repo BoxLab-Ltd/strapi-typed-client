@@ -13,6 +13,9 @@ import type {
 } from '../../../src/schema-types.js'
 import { mockSchema } from './fixtures/mock-schema.js'
 
+// Each test runs a full generation with a strict type check; CI runners are several times slower
+const GENERATION_TIMEOUT = 30_000
+
 /**
  * The validators promise two things, both checked against generated output:
  * a schema's input type agrees with the TS input type it validates, and a
@@ -203,7 +206,7 @@ function repoTmpDir(prefix: string): string {
     return fs.mkdtempSync(path.join(base, prefix))
 }
 
-describe('generated Zod validators', () => {
+describe('generated Zod validators', { timeout: GENERATION_TIMEOUT }, () => {
     let dir: string
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let v: Record<string, any>
@@ -495,60 +498,67 @@ describe('generated Zod validators', () => {
     })
 })
 
-describe('Zod schema and TS input type agreement', () => {
-    it('every schema accepts exactly its TS input type, in both directions', async () => {
-        const dir = repoTmpDir('agreement-')
-        try {
-            await new Generator(dir).generate(schema, {
-                format: 'ts',
-                validation: 'zod',
-            })
-            const names = [
-                ...schema.contentTypes.map(c => c.cleanName),
-                ...schema.components.map(c => c.cleanName),
-            ].flatMap(n => [`${n}CreateInput`, `${n}UpdateInput`])
-            const dzNames = [
-                'ProbePart',
-                'ProbeOther',
-                'LandingHero',
-                'LandingFeature',
-            ].flatMap(n => [`${n}DzCreateInput`, `${n}DzUpdateInput`])
-            const all = [...names, ...dzNames]
-            const assertions = `import type { z } from 'zod'
+describe(
+    'Zod schema and TS input type agreement',
+    { timeout: GENERATION_TIMEOUT },
+    () => {
+        it('every schema accepts exactly its TS input type, in both directions', async () => {
+            const dir = repoTmpDir('agreement-')
+            try {
+                await new Generator(dir).generate(schema, {
+                    format: 'ts',
+                    validation: 'zod',
+                })
+                const names = [
+                    ...schema.contentTypes.map(c => c.cleanName),
+                    ...schema.components.map(c => c.cleanName),
+                ].flatMap(n => [`${n}CreateInput`, `${n}UpdateInput`])
+                const dzNames = [
+                    'ProbePart',
+                    'ProbeOther',
+                    'LandingHero',
+                    'LandingFeature',
+                ].flatMap(n => [`${n}DzCreateInput`, `${n}DzUpdateInput`])
+                const all = [...names, ...dzNames]
+                const assertions = `import type { z } from 'zod'
 import type * as T from './types'
 import type * as V from './validation'
 type Same<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false
 ${all.map(n => `const _${n}: Same<z.input<typeof V.${n}Schema>, T.${n}> = true`).join('\n')}
 `
-            fs.writeFileSync(path.join(dir, 'agreement.ts'), assertions)
-            for (const exactOptionalPropertyTypes of [false, true]) {
-                const program = ts.createProgram(
-                    [path.join(dir, 'agreement.ts')],
-                    {
-                        target: ts.ScriptTarget.ES2022,
-                        module: ts.ModuleKind.ES2022,
-                        moduleResolution: ts.ModuleResolutionKind.Bundler,
-                        strict: true,
-                        exactOptionalPropertyTypes,
-                        noEmit: true,
-                        skipLibCheck: true,
-                    },
-                )
-                const errors = ts
-                    .getPreEmitDiagnostics(program)
-                    .map(d =>
-                        ts.flattenDiagnosticMessageText(d.messageText, '\n'),
+                fs.writeFileSync(path.join(dir, 'agreement.ts'), assertions)
+                for (const exactOptionalPropertyTypes of [false, true]) {
+                    const program = ts.createProgram(
+                        [path.join(dir, 'agreement.ts')],
+                        {
+                            target: ts.ScriptTarget.ES2022,
+                            module: ts.ModuleKind.ES2022,
+                            moduleResolution: ts.ModuleResolutionKind.Bundler,
+                            strict: true,
+                            exactOptionalPropertyTypes,
+                            noEmit: true,
+                            skipLibCheck: true,
+                        },
                     )
-                expect({ exactOptionalPropertyTypes, errors }).toEqual({
-                    exactOptionalPropertyTypes,
-                    errors: [],
-                })
+                    const errors = ts
+                        .getPreEmitDiagnostics(program)
+                        .map(d =>
+                            ts.flattenDiagnosticMessageText(
+                                d.messageText,
+                                '\n',
+                            ),
+                        )
+                    expect({ exactOptionalPropertyTypes, errors }).toEqual({
+                        exactOptionalPropertyTypes,
+                        errors: [],
+                    })
+                }
+            } finally {
+                fs.rmSync(dir, { recursive: true, force: true })
             }
-        } finally {
-            fs.rmSync(dir, { recursive: true, force: true })
-        }
-    })
-})
+        })
+    },
+)
 
 describe('resolveZod', () => {
     it('explains how to install zod when it cannot be found', () => {
