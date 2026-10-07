@@ -125,10 +125,14 @@ describe('parseControllerSource', () => {
             export interface Endpoints {
                 list: { response: Awaited<ReturnType<typeof svc.find>> }
                 load: { response: import('./x').Thing }
+                partial: { response: { ok: boolean; data: Partial<ReturnType<typeof svc.find>> } }
             }
         `)
-        expect(endpoints?.list?.response).toBe('Awaited<ReturnType<unknown>>')
+        expect(endpoints?.list?.response).toBe('unknown')
         expect(endpoints?.load?.response).toBe('unknown')
+        expect(endpoints?.partial?.response).toBe(
+            '{ ok: boolean; data: unknown; }',
+        )
     })
 
     it('needs the export, as before', () => {

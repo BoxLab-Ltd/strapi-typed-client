@@ -143,10 +143,14 @@ function toPortable(ts: typeof TS, node: TS.TypeNode): TS.TypeNode {
     const result = ts.transform(node, [
         context => {
             const visit = (child: TS.Node): TS.Node => {
+                // A whole generic reference goes: `ReturnType<unknown>` would
+                // break the parameter's constraint
                 if (
-                    ts.isTypeQueryNode(child) ||
-                    ts.isImportTypeNode(child) ||
-                    ts.isThisTypeNode(child)
+                    isNonPortable(ts, child) ||
+                    (ts.isTypeReferenceNode(child) &&
+                        child.typeArguments?.some(arg =>
+                            containsNonPortable(ts, arg),
+                        ))
                 ) {
                     return ts.factory.createKeywordTypeNode(
                         ts.SyntaxKind.UnknownKeyword,
@@ -169,4 +173,22 @@ function toPortable(ts: typeof TS, node: TS.TypeNode): TS.TypeNode {
     // Not disposed: that would drop the emit flags before printing
     const [portable] = result.transformed
     return portable ?? node
+}
+
+function isNonPortable(ts: typeof TS, node: TS.Node): boolean {
+    return (
+        ts.isTypeQueryNode(node) ||
+        ts.isImportTypeNode(node) ||
+        ts.isThisTypeNode(node)
+    )
+}
+
+function containsNonPortable(ts: typeof TS, node: TS.Node): boolean {
+    return (
+        isNonPortable(ts, node) ||
+        (ts.forEachChild(node, child =>
+            containsNonPortable(ts, child) ? true : undefined,
+        ) ??
+            false)
+    )
 }
