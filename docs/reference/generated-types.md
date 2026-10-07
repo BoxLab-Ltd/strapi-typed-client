@@ -6,13 +6,14 @@ This page explains the structure of the TypeScript files produced by the `strapi
 
 Generated files are written to the directory you pass with the required `--output` flag — a directory in your source tree that you commit, e.g. `./src/strapi`. The default `--format js` emits compiled `.js` + `.d.ts`; `--format ts` emits raw `.ts` instead.
 
-| File          | Description                                                                                             |
-| ------------- | ------------------------------------------------------------------------------------------------------- |
-| `types.d.ts`  | All TypeScript interfaces: base types, input types, payload types, components, filters, populate params |
-| `client.js`   | The `StrapiClient` class with typed methods for every content type (also exports `SCHEMA_HASH`)         |
-| `client.d.ts` | Type declarations for the client                                                                        |
-| `index.js`    | Re-exports everything from `types` and `client`                                                         |
-| `index.d.ts`  | Type declarations for the index                                                                         |
+| File                                | Description                                                                                             |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `types.d.ts`                        | All TypeScript interfaces: base types, input types, payload types, components, filters, populate params |
+| `client.js`                         | The `StrapiClient` class with typed methods for every content type (also exports `SCHEMA_HASH`)         |
+| `client.d.ts`                       | Type declarations for the client                                                                        |
+| `index.js`                          | Re-exports everything from `types` and `client`                                                         |
+| `index.d.ts`                        | Type declarations for the index                                                                         |
+| `validation.js` / `validation.d.ts` | Zod schemas for every create/update input — only with `--validation zod`, not re-exported from `index`  |
 
 ```
 src/strapi/
@@ -21,6 +22,8 @@ src/strapi/
   client.d.ts       # Client type declarations
   index.js          # Re-export barrel
   index.d.ts        # Index type declarations
+  validation.js     # Zod validators (only with --validation zod)
+  validation.d.ts
 ```
 
 ## Type Categories
@@ -57,32 +60,26 @@ Key characteristics:
 
 ### 2. Input Types
 
-Input types are used for `create` and `update` operations. Every field is optional to support partial updates.
+Input types are used for `create` and `update` operations: `ArticleCreateInput` enforces what Strapi requires on create, `ArticleUpdateInput` makes every key optional for partial updates.
 
 ```ts
-export interface ArticleInput {
-    title?: string | null
+export interface ArticleCreateInput {
+    title: string // required in the schema
     slug?: string | null
-    body?: string | null
-    publishDate?: string | null
-    views?: number | null
     status?: 'draft' | 'published' | 'archived' | null
-    category?: number | null // relation -> ID
-    cover?: number | null // media -> ID
-    gallery?: number[] | null // multiple media -> ID array
-    tags?: number[] | null // many relation -> ID array
-    seo?: SeoComponentInput | null // component -> nested input object
-    blocks?: (HeroInput | CtaInput)[] | null // dynamic zone -> union input array
+    views?: string | number | null // biginteger
+    category?: RelationInput // id, documentId, reference object, array, or { connect | disconnect | set }
+    cover?: MediaInput // media -> ID
+    gallery?: MultiMediaInput // multiple media -> ID array
+    seo?: SeoCreateInput | null // single component
+    sections?: SectionCreateInput[] // repeatable component — never null
+    blocks?: (HeroDzCreateInput | CtaDzCreateInput)[] // dynamic zone — never null
+    locale?: string
+    publishedAt?: string | null
 }
 ```
 
-Key characteristics:
-
-- All fields are optional (`?:`).
-- Relations accept numeric IDs (not full objects).
-- Media fields accept numeric IDs.
-- Components use their corresponding `*Input` type.
-- Dynamic zones use a union of `*Input` types.
+The full rules — required fields with defaults, required components, private and password fields — are in [Input Types](/guide/input-types#create-vs-update).
 
 ### 3. Payload Types (GetPayload)
 

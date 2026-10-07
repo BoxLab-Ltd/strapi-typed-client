@@ -30,13 +30,14 @@ export default withStrapiTypes({
 
 ### Options
 
-| Option      | Description                                                                                                               | Default                                     |
-| ----------- | ------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
-| `strapiUrl` | Strapi server URL                                                                                                         | `STRAPI_URL` env or `http://localhost:1337` |
-| `token`     | API token                                                                                                                 | `STRAPI_TOKEN` env                          |
-| `silent`    | Suppress generation logs                                                                                                  | `false`                                     |
-| `format`    | `js` (compiled `.js` + `.d.ts`) or `ts` (raw `.ts` for bundlers/monorepos)                                                | the format already in `output`, else `js`   |
-| `output`    | Output directory — must point at your source tree (e.g. `./src/strapi`). The plugin throws a clear error if it is missing | required                                    |
+| Option       | Description                                                                                                               | Default                                     |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
+| `strapiUrl`  | Strapi server URL                                                                                                         | `STRAPI_URL` env or `http://localhost:1337` |
+| `token`      | API token                                                                                                                 | `STRAPI_TOKEN` env                          |
+| `silent`     | Suppress generation logs                                                                                                  | `false`                                     |
+| `format`     | `js` (compiled `.js` + `.d.ts`) or `ts` (raw `.ts` for bundlers/monorepos)                                                | the format already in `output`, else `js`   |
+| `validation` | `'zod'` also emits Zod validators for create/update inputs (needs zod 4); `'none'` turns them off                         | the mode already in `output`, else `'none'` |
+| `output`     | Output directory — must point at your source tree (e.g. `./src/strapi`). The plugin throws a clear error if it is missing | required                                    |
 
 ### Raw `.ts` output for bundlers and monorepos
 

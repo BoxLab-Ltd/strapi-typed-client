@@ -20,14 +20,15 @@ Run it from your project root (where `package.json` lives). In an interactive te
 
 **Options:**
 
-| Option     | Description                                                                                                                                                                          | Default        |
-| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------- |
-| `--url`    | Strapi URL to bake into the scripts. Only an explicitly passed (or typed) URL is written — with `STRAPI_URL` or the default, scripts omit `--url` so the environment stays in charge | omitted        |
-| `--output` | Output directory for generated files (your source tree, committed)                                                                                                                   | `./src/strapi` |
-| `--format` | `js` (compiled `.js` + `.d.ts`) or `ts` (raw `.ts`)                                                                                                                                  | `js`           |
-| `--yes`    | Accept defaults for anything not passed; never prompt                                                                                                                                | `false`        |
-| `--force`  | Overwrite conflicting `strapi:*` scripts (other keys are never touched)                                                                                                              | `false`        |
-| `--silent` | Suppress output messages; implies `--yes` (never prompts)                                                                                                                            | `false`        |
+| Option         | Description                                                                                                                                                                          | Default        |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------- |
+| `--url`        | Strapi URL to bake into the scripts. Only an explicitly passed (or typed) URL is written — with `STRAPI_URL` or the default, scripts omit `--url` so the environment stays in charge | omitted        |
+| `--output`     | Output directory for generated files (your source tree, committed)                                                                                                                   | `./src/strapi` |
+| `--format`     | `js` (compiled `.js` + `.d.ts`) or `ts` (raw `.ts`)                                                                                                                                  | `js`           |
+| `--validation` | `zod` adds `--validation zod` to the generate script (see [Runtime validation](/guide/input-types#runtime-validation-zod))                                                           | `none`         |
+| `--yes`        | Accept defaults for anything not passed; never prompt                                                                                                                                | `false`        |
+| `--force`      | Overwrite conflicting `strapi:*` scripts (other keys are never touched)                                                                                                              | `false`        |
+| `--silent`     | Suppress output messages; implies `--yes` (never prompts)                                                                                                                            | `false`        |
 
 What it writes:
 
@@ -52,15 +53,16 @@ npx strapi-types generate --url http://localhost:1337
 
 **Options:**
 
-| Option           | Description                                                                                | Default                                          |
-| ---------------- | ------------------------------------------------------------------------------------------ | ------------------------------------------------ |
-| `--url`          | Strapi server URL                                                                          | `STRAPI_URL` env or `http://localhost:1337`      |
-| `--token`        | API token for authenticated access                                                         | `STRAPI_TOKEN` env var                           |
-| `--output`       | Output directory for generated files                                                       | required (your source tree, e.g. `./src/strapi`) |
-| `--silent`       | Suppress all console output                                                                | `false`                                          |
-| `--force`        | Regenerate even if schema has not changed                                                  | `false`                                          |
-| `--format`       | Output format: `js` (compiled `.js` + `.d.ts`) or `ts` (raw `.ts`)                         | the format already in `--output`, else `js`      |
-| `--no-typecheck` | Write output even if it fails type-checking (escape hatch for strict-only false positives) | type-checking on                                 |
+| Option           | Description                                                                                   | Default                                          |
+| ---------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| `--url`          | Strapi server URL                                                                             | `STRAPI_URL` env or `http://localhost:1337`      |
+| `--token`        | API token for authenticated access                                                            | `STRAPI_TOKEN` env var                           |
+| `--output`       | Output directory for generated files                                                          | required (your source tree, e.g. `./src/strapi`) |
+| `--silent`       | Suppress all console output                                                                   | `false`                                          |
+| `--force`        | Regenerate even if schema has not changed                                                     | `false`                                          |
+| `--format`       | Output format: `js` (compiled `.js` + `.d.ts`) or `ts` (raw `.ts`)                            | the format already in `--output`, else `js`      |
+| `--no-typecheck` | Write output even if it fails type-checking (escape hatch for strict-only false positives)    | type-checking on                                 |
+| `--validation`   | `zod` also emits Zod validators for create/update inputs (needs zod 4); `none` turns them off | the mode already in `--output`, else `none`      |
 
 **Examples:**
 
@@ -122,14 +124,15 @@ This is useful during development. The command runs continuously and:
 
 **Options:**
 
-| Option           | Description                                                                                | Default                                          |
-| ---------------- | ------------------------------------------------------------------------------------------ | ------------------------------------------------ |
-| `--url`          | Strapi server URL                                                                          | `STRAPI_URL` env or `http://localhost:1337`      |
-| `--token`        | API token for authenticated access                                                         | `STRAPI_TOKEN` env var                           |
-| `--output`       | Output directory for generated files                                                       | required (your source tree, e.g. `./src/strapi`) |
-| `--silent`       | Suppress regeneration messages                                                             | `false`                                          |
-| `--format`       | Output format: `js` (compiled `.js` + `.d.ts`) or `ts` (raw `.ts`)                         | the format already in `--output`, else `js`      |
-| `--no-typecheck` | Write output even if it fails type-checking (escape hatch for strict-only false positives) | type-checking on                                 |
+| Option           | Description                                                                                   | Default                                          |
+| ---------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| `--url`          | Strapi server URL                                                                             | `STRAPI_URL` env or `http://localhost:1337`      |
+| `--token`        | API token for authenticated access                                                            | `STRAPI_TOKEN` env var                           |
+| `--output`       | Output directory for generated files                                                          | required (your source tree, e.g. `./src/strapi`) |
+| `--silent`       | Suppress regeneration messages                                                                | `false`                                          |
+| `--format`       | Output format: `js` (compiled `.js` + `.d.ts`) or `ts` (raw `.ts`)                            | the format already in `--output`, else `js`      |
+| `--no-typecheck` | Write output even if it fails type-checking (escape hatch for strict-only false positives)    | type-checking on                                 |
+| `--validation`   | `zod` also emits Zod validators for create/update inputs (needs zod 4); `none` turns them off | the mode already in `--output`, else `none`      |
 
 Each regeneration goes through `generate`, so the options above behave exactly as they do there.
 

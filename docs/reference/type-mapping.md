@@ -99,8 +99,6 @@ The following fields from the Strapi schema are **not** included in generated ty
 
 | Field / Attribute            | Reason                                            |
 | ---------------------------- | ------------------------------------------------- |
-| `publishedAt`                | Managed by Strapi internally                      |
-| `password`                   | Private attribute                                 |
 | Admin relations (`admin::*`) | Admin panel internals (except the creator fields) |
 | Non-user plugin relations    | Plugin internals (except `users-permissions`)     |
 
@@ -108,8 +106,8 @@ The following fields from the Strapi schema are **not** included in generated ty
 If your content type has the Strapi i18n plugin enabled, `locale` (string) and `localizations` (self-referencing relation) are **automatically included** in generated types. Content types without i18n are not affected.
 :::
 
-::: tip
-Any attribute marked as `private` in the Strapi schema is automatically excluded from generated types. The `password` type is the most common example.
+::: tip Private and password fields
+Attributes marked `private`, and every `password` field, never appear on read types or filters — Strapi does not return them. Strapi does accept them on write, so they are present in the create/update input types.
 :::
 
 ## Creator Fields
@@ -163,20 +161,19 @@ Nullability depends on the `required` setting in your Strapi schema and the type
 
 ### Input Types (writing)
 
-- **All fields** are optional (`?:`) because input types are used for both create and partial update operations.
-- Scalar fields use `| null` to allow clearing a value (e.g., `title?: string | null`).
-- Relation fields are typed `RelationInput`: `category?: RelationInput` (accepts an id/documentId, an array, or `{ connect | disconnect | set }`).
-- Media fields are typed `MediaInput` (single) or `MultiMediaInput` (multiple): `avatar?: MediaInput`, `gallery?: MultiMediaInput`.
-- Component fields accept objects: `seo?: SeoComponentInput | null`.
+- `*CreateInput` requires the fields Strapi requires on create (a required field with a schema `default` stays optional — Strapi fills it in); `*UpdateInput` makes every key optional.
+- Non-required scalars accept `null` to clear a value; repeatable components and dynamic zones do not (send `[]`).
+- Relation fields are typed `RelationInput`, media fields `MediaInput` / `MultiMediaInput`, components their `*CreateInput` / `*UpdateInput`.
 
 ```ts
-// All input fields are optional for partial updates
-interface ArticleInput {
-    title?: string | null
+interface ArticleCreateInput {
+    title: string // required
     body?: string | null
-    category?: RelationInput // relation (id, documentId, array, or operations)
+    category?: RelationInput // relation (id, documentId, reference object, array, or operations)
     cover?: MediaInput // media by id
-    seo?: SeoComponentInput | null // component as object
+    seo?: SeoCreateInput | null // component as object
     tags?: RelationInput // relation (any cardinality)
 }
 ```
+
+See [Input Types](/guide/input-types#create-vs-update) for the full rules and the optional [Zod validators](/guide/input-types#runtime-validation-zod).
