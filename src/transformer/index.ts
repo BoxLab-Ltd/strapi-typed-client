@@ -28,6 +28,7 @@ export class TypeTransformer {
             case 'text':
             case 'richtext':
             case 'email':
+            case 'password':
                 return 'string'
 
             case 'blocks':

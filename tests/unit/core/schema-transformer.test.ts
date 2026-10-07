@@ -460,6 +460,7 @@ describe('Schema Transformer', () => {
                         },
                         attributes: {
                             stringField: { type: 'string' },
+                            privateField: { type: 'string', private: true },
                             textField: { type: 'text' },
                             richtextField: { type: 'richtext' },
                             blocksField: { type: 'blocks' },
@@ -488,6 +489,12 @@ describe('Schema Transformer', () => {
             expect(attrs.find(a => a.name === 'stringField')!.type.kind).toBe(
                 'string',
             )
+            expect(attrs.find(a => a.name === 'stringField')!.writeOnly).toBe(
+                undefined,
+            )
+            expect(attrs.find(a => a.name === 'privateField')!.writeOnly).toBe(
+                true,
+            )
             expect(attrs.find(a => a.name === 'textField')!.type.kind).toBe(
                 'text',
             )
@@ -500,7 +507,10 @@ describe('Schema Transformer', () => {
             expect(attrs.find(a => a.name === 'emailField')!.type.kind).toBe(
                 'email',
             )
-            expect(attrs.find(a => a.name === 'passwordField')).toBeUndefined()
+            expect(attrs.find(a => a.name === 'passwordField')).toMatchObject({
+                type: { kind: 'password' },
+                writeOnly: true,
+            })
             expect(attrs.find(a => a.name === 'uidField')!.type.kind).toBe(
                 'string',
             )

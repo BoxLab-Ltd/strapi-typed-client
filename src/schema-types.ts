@@ -69,6 +69,7 @@ export interface Attribute {
     unique?: boolean
     defaultValue?: unknown
     constraints?: AttributeConstraints
+    writeOnly?: boolean // private or password: accepted on write, never returned
 }
 
 // Validation constraints from the Strapi schema; only type-relevant keys present
@@ -86,6 +87,7 @@ export type AttributeType =
     | { kind: 'richtext' }
     | { kind: 'blocks' }
     | { kind: 'email' }
+    | { kind: 'password' }
     | { kind: 'integer' }
     | { kind: 'biginteger' }
     | { kind: 'float' }

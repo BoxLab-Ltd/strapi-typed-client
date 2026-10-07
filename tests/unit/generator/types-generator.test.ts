@@ -969,4 +969,59 @@ describe('TypesGenerator', () => {
             expect(out).toContain(`kind?: ("it's") | StringFilterOperators`)
         })
     })
+
+    describe('write-only attributes', () => {
+        const sliceInterface = (src: string, header: string): string => {
+            const start = src.indexOf(header)
+            if (start === -1) return ''
+            const next = src.indexOf('\nexport ', start + header.length)
+            return src.slice(start, next === -1 ? undefined : next)
+        }
+
+        const out = new TypesGenerator().generate({
+            contentTypes: [
+                {
+                    name: 'ApiAccountAccount',
+                    cleanName: 'Account',
+                    collectionName: 'accounts',
+                    singularName: 'account',
+                    pluralName: 'accounts',
+                    kind: 'collection',
+                    attributes: [
+                        {
+                            name: 'login',
+                            type: { kind: 'string' },
+                            required: true,
+                        },
+                        {
+                            name: 'password',
+                            type: { kind: 'password' },
+                            required: true,
+                            writeOnly: true,
+                        },
+                    ],
+                    relations: [],
+                    media: [],
+                    components: [],
+                    dynamicZones: [],
+                },
+            ],
+            components: [],
+        })
+
+        it('accepts them on input', () => {
+            expect(
+                sliceInterface(out, 'export interface AccountCreateInput {'),
+            ).toContain('password: string;')
+        })
+
+        it('never shows them on the read type or in filters', () => {
+            expect(
+                sliceInterface(out, 'export interface Account {'),
+            ).not.toContain('password')
+            expect(
+                sliceInterface(out, 'export interface AccountFilters {'),
+            ).not.toContain('password')
+        })
+    })
 })

@@ -86,3 +86,32 @@ describe('plugin schema service — creator fields', () => {
         expect(Object.keys(attributes)).not.toContain('owningRole')
     })
 })
+
+describe('plugin schema service — private attributes', () => {
+    it('forwards private scalars, still marked private, since Strapi accepts them on write', () => {
+        const attributes = attributesOf(
+            strapiStub(false, {
+                secretNote: { type: 'string', private: true },
+                password: { type: 'password', private: true },
+            }),
+        )
+
+        expect(attributes.secretNote).toEqual({ type: 'string', private: true })
+        expect(attributes.password).toEqual({ type: 'password', private: true })
+    })
+
+    it('still drops private relations', () => {
+        const attributes = attributesOf(
+            strapiStub(false, {
+                hiddenTag: {
+                    type: 'relation',
+                    relation: 'manyToOne',
+                    target: 'api::tag.tag',
+                    private: true,
+                },
+            }),
+        )
+
+        expect(Object.keys(attributes)).not.toContain('hiddenTag')
+    })
+})

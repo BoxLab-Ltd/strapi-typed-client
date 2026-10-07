@@ -30,6 +30,13 @@ export type {
     ExtraControllerType,
 }
 
+const NON_SCALAR_TYPES = new Set([
+    'relation',
+    'media',
+    'component',
+    'dynamiczone',
+])
+
 /**
  * Filter out system attributes that shouldn't be exposed
  */
@@ -49,8 +56,9 @@ function filterAttributes(
             continue
         }
 
-        // Skip private attributes
-        if (attr.private) {
+        // Private scalars are hidden from responses but still writable, so
+        // inputs need them; private relations stay out (creator-field gate).
+        if (attr.private && NON_SCALAR_TYPES.has(attr.type as string)) {
             continue
         }
 

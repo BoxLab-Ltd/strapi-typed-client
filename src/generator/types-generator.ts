@@ -452,14 +452,16 @@ type _ApplyFields<TFull, TBase, TEntry> = TEntry extends true ? TFull : TEntry e
             isExported: true,
             properties: [
                 { name: 'id', type: 'number' },
-                ...component.attributes.map(attr => ({
-                    name: attr.name,
-                    type: this.transformer.toTypeScript(
-                        attr.type,
-                        attr.required,
-                    ),
-                    ...this.docsFor(attr),
-                })),
+                ...component.attributes
+                    .filter(attr => !attr.writeOnly)
+                    .map(attr => ({
+                        name: attr.name,
+                        type: this.transformer.toTypeScript(
+                            attr.type,
+                            attr.required,
+                        ),
+                        ...this.docsFor(attr),
+                    })),
             ],
         })
     }
@@ -615,14 +617,16 @@ type _ApplyFields<TFull, TBase, TEntry> = TEntry extends true ? TFull : TEntry e
                 { name: 'createdAt', type: 'string' },
                 { name: 'updatedAt', type: 'string' },
                 { name: 'publishedAt', type: 'string | null' },
-                ...contentType.attributes.map(attr => ({
-                    name: attr.name,
-                    type: this.transformer.toTypeScript(
-                        attr.type,
-                        attr.required,
-                    ),
-                    ...this.docsFor(attr),
-                })),
+                ...contentType.attributes
+                    .filter(attr => !attr.writeOnly)
+                    .map(attr => ({
+                        name: attr.name,
+                        type: this.transformer.toTypeScript(
+                            attr.type,
+                            attr.required,
+                        ),
+                        ...this.docsFor(attr),
+                    })),
             ],
         })
     }

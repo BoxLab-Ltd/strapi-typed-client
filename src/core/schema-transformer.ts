@@ -291,6 +291,9 @@ function processAttribute(
             type: attrType,
             required,
             ...(attr.unique === true ? { unique: true } : {}),
+            ...(attr.private === true || attrType.kind === 'password'
+                ? { writeOnly: true }
+                : {}),
             ...(attr.default !== undefined
                 ? { defaultValue: attr.default }
                 : {}),
@@ -333,7 +336,7 @@ function mapStrapiType(attr: StrapiAttribute): AttributeType | null {
         case 'email':
             return { kind: 'email' }
         case 'password':
-            return null // passwords are never returned by Strapi API
+            return { kind: 'password' }
         case 'uid':
             return { kind: 'string' }
         case 'integer':

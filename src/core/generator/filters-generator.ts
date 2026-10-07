@@ -229,11 +229,13 @@ function buildFilterProperties(
 
     return [
         ...systemFields,
-        ...type.attributes.map(attr => ({
-            name: attr.name,
-            type: getFilterTypeForAttribute(attr),
-            hasQuestionToken: true,
-        })),
+        ...type.attributes
+            .filter(attr => !attr.writeOnly)
+            .map(attr => ({
+                name: attr.name,
+                type: getFilterTypeForAttribute(attr),
+                hasQuestionToken: true,
+            })),
         ...type.relations.map(rel => ({
             name: rel.name,
             type: '{ id?: number | IdFilterOperators; documentId?: string | StringFilterOperators; [key: string]: any }',

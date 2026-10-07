@@ -837,6 +837,9 @@ function getDetails(attr: any): string {
     if (attr.multiple) {
         details.push('multiple')
     }
+    if (attr.private) {
+        details.push('private (input only)')
+    }
 
     return details.join(' ')
 }
