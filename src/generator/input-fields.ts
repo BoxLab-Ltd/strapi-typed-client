@@ -37,7 +37,8 @@ export function inputFields(
 
     for (const attr of type.attributes) {
         // Strapi applies a schema default before checking `required`
-        const hasDefault = attr.defaultValue !== undefined
+        const hasDefault =
+            attr.defaultValue !== undefined && attr.defaultValue !== null
         fields.push({
             name: attr.name,
             optional: update || !attr.required || hasDefault,

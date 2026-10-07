@@ -165,10 +165,10 @@ export type StrapiID = string | number
  * Where a connected relation lands in an ordered relation list.
  */
 export interface RelationPosition {
-  before?: StrapiID
-  after?: StrapiID
-  start?: true
-  end?: true
+  before?: StrapiID | undefined
+  after?: StrapiID | undefined
+  start?: true | undefined
+  end?: true | undefined
 }
 
 /**
@@ -176,11 +176,11 @@ export interface RelationPosition {
  * \`locale\` / \`status\` pick the localized or draft version of the target document.
  */
 export interface RelationRef {
-  documentId?: string
-  id?: number
-  locale?: string | null
-  status?: 'draft' | 'published'
-  position?: RelationPosition
+  documentId?: string | undefined
+  id?: number | undefined
+  locale?: string | null | undefined
+  status?: 'draft' | 'published' | undefined
+  position?: RelationPosition | undefined
 }
 
 /**
@@ -188,9 +188,9 @@ export interface RelationRef {
  * See: https://docs.strapi.io/cms/api/rest/relations
  */
 export interface RelationOperations {
-  connect?: (StrapiID | RelationRef)[]
-  disconnect?: (StrapiID | RelationRef)[]
-  set?: (StrapiID | RelationRef)[]
+  connect?: (StrapiID | RelationRef)[] | undefined
+  disconnect?: (StrapiID | RelationRef)[] | undefined
+  set?: (StrapiID | RelationRef)[] | undefined
 }
 
 /**
@@ -512,9 +512,14 @@ type _ApplyFields<TFull, TBase, TEntry> = TEntry extends true ? TFull : TEntry e
         mode: InputMode,
         isContentType: boolean,
     ): OptionalKind<PropertySignatureStructure>[] {
+        // `| undefined` on optional keys: JSON drops them, so Strapi accepts
+        // them, and it keeps exactOptionalPropertyTypes consumers in step with
+        // the Zod schemas, whose .optional() admits undefined
         return inputFields(type, mode, isContentType).map(field => ({
             name: field.name,
-            type: this.inputFieldType(field, mode),
+            type: field.optional
+                ? `${this.inputFieldType(field, mode)} | undefined`
+                : this.inputFieldType(field, mode),
             hasQuestionToken: field.optional,
             ...(field.kind === 'attribute' ? this.docsFor(field.attr) : {}),
         }))
@@ -543,6 +548,7 @@ type _ApplyFields<TFull, TBase, TEntry> = TEntry extends true ? TFull : TEntry e
                 const members = field.componentTypes.map(
                     ct => `${ct}Dz${mode}Input`,
                 )
+                if (members.length === 0) return 'never[]'
                 return members.length === 1
                     ? `${members[0]}[]`
                     : `(${members.join(' | ')})[]`
@@ -783,9 +789,9 @@ ${perFieldPop}
         }
 
         for (const dzField of type.dynamicZones) {
-            const unionType = dzField.componentTypes
-                .map(ct => `${ct}Dz`)
-                .join(' | ')
+            const unionType =
+                dzField.componentTypes.map(ct => `${ct}Dz`).join(' | ') ||
+                'never'
             fields.push(`          ${dzField.name}?: (${unionType})[]`)
         }
 
@@ -827,9 +833,9 @@ ${perFieldPop}
         }
 
         for (const dzField of type.dynamicZones) {
-            const unionType = dzField.componentTypes
-                .map(ct => `${ct}Dz`)
-                .join(' | ')
+            const unionType =
+                dzField.componentTypes.map(ct => `${ct}Dz`).join(' | ') ||
+                'never'
             fields.push(
                 `            ${dzField.name}?: '${dzField.name}' extends Pop[number] ? (${unionType})[] : never`,
             )
@@ -905,7 +911,7 @@ ${perFieldPop}
                     componentEntries.push(dzVariant)
                 }
             }
-            const dzType = `(${componentEntries.join(' | ')})[]`
+            const dzType = `(${componentEntries.join(' | ') || 'never'})[]`
             fields.push(
                 `          ${dzField.name}?: '${dzField.name}' extends keyof Pop ? ${dzType} : never`,
             )
@@ -955,7 +961,7 @@ const NUMERIC_KINDS = new Set(['integer', 'float', 'decimal'])
 // would fail the `satisfies Partial<*CreateInput>` check and abort generation.
 function defaultLiteral(attr: Attribute): string | undefined {
     const value = attr.defaultValue
-    if (value === undefined) return undefined
+    if (value === undefined || value === null) return undefined
     if (attr.type.kind === 'biginteger') return JSON.stringify(String(value))
     if (NUMERIC_KINDS.has(attr.type.kind) && typeof value === 'string') {
         const n = Number(value)

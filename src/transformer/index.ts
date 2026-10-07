@@ -73,7 +73,7 @@ export class TypeTransformer {
                 const components = attrType.components.map(c =>
                     convertComponentName(c),
                 )
-                return `(${components.join(' | ')})[]`
+                return `(${components.join(' | ') || 'never'})[]`
             }
 
             case 'relation':

@@ -397,8 +397,12 @@ describe('TypesGenerator', () => {
             expect(output).toContain('  images?: MultiMediaInput')
             expect(output).toContain('  items?: RelationInput')
             expect(output).toContain('  owner?: RelationInput')
-            expect(output).toContain('  config?: ProjectConfigCreateInput[];')
-            expect(output).toContain('  config?: ProjectConfigUpdateInput[];')
+            expect(output).toContain(
+                '  config?: ProjectConfigCreateInput[] | undefined;',
+            )
+            expect(output).toContain(
+                '  config?: ProjectConfigUpdateInput[] | undefined;',
+            )
         })
 
         it('ProjectConfigCreateInput has no __component (regular component, not DZ)', () => {
@@ -429,10 +433,10 @@ describe('TypesGenerator', () => {
 
         it('DZ field uses the *DzCreateInput / *DzUpdateInput unions', () => {
             expect(output).toMatch(
-                /sections\?: \(LandingHeroDzCreateInput \| LandingFeatureDzCreateInput\)\[\];/,
+                /sections\?: \(LandingHeroDzCreateInput \| LandingFeatureDzCreateInput\)\[\] \| undefined;/,
             )
             expect(output).toMatch(
-                /sections\?: \(LandingHeroDzUpdateInput \| LandingFeatureDzUpdateInput\)\[\];/,
+                /sections\?: \(LandingHeroDzUpdateInput \| LandingFeatureDzUpdateInput\)\[\] \| undefined;/,
             )
         })
     })
@@ -852,23 +856,31 @@ describe('TypesGenerator', () => {
         )
 
         it('lets a required field with a default be omitted on create, never nulled', () => {
-            expect(create).toContain('withDefault?: string;')
+            expect(create).toContain('withDefault?: string | undefined;')
         })
 
         it('requires a required single component on create and never accepts null for it', () => {
             expect(create).toContain('reqPart: ProbePartCreateInput;')
-            expect(update).toContain('reqPart?: ProbePartUpdateInput;')
-            expect(create).toContain('part?: ProbePartCreateInput | null;')
+            expect(update).toContain(
+                'reqPart?: ProbePartUpdateInput | undefined;',
+            )
+            expect(create).toContain(
+                'part?: ProbePartCreateInput | null | undefined;',
+            )
         })
 
         it('does not accept null for repeatable components or dynamic zones', () => {
-            expect(create).toContain('parts?: ProbePartCreateInput[];')
-            expect(create).toContain('zone?: ProbePartDzCreateInput[];')
+            expect(create).toContain(
+                'parts?: ProbePartCreateInput[] | undefined;',
+            )
+            expect(create).toContain(
+                'zone?: ProbePartDzCreateInput[] | undefined;',
+            )
         })
 
         it('accepts the top-level locale and publishedAt keys on content types only', () => {
-            expect(create).toContain('locale?: string;')
-            expect(create).toContain('publishedAt?: string | null;')
+            expect(create).toContain('locale?: string | undefined;')
+            expect(create).toContain('publishedAt?: string | null | undefined;')
             expect(
                 sliceInterface(out, 'export interface ProbePartCreateInput {'),
             ).not.toContain('locale')
@@ -949,7 +961,7 @@ describe('TypesGenerator', () => {
         it('accepts a biginteger as a string or a number on input', () => {
             expect(
                 sliceInterface(out, 'export interface CounterCreateInput {'),
-            ).toContain('total?: string | number;')
+            ).toContain('total?: string | number | undefined;')
         })
 
         it('normalizes numeric-string defaults and drops ones that cannot fit', () => {

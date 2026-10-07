@@ -66,7 +66,7 @@ export class Generator {
     ): Promise<void> {
         // Fail before any work: a missing zod or a foreign validation file must
         // not leave a half-written tree
-        this.assertValidationFilesAreOurs(format, validation)
+        this.assertValidationFilesAreOurs(validation)
         const zodDir =
             validation === 'zod' ? resolveZod(this.outputDir) : undefined
         const moduleOptions: ts.CompilerOptions = zodDir
@@ -129,12 +129,13 @@ export class Generator {
         this.removeStaleValidationFiles(format, validation)
     }
 
-    private assertValidationFilesAreOurs(
-        format: 'js' | 'ts',
-        validation: ValidationMode,
-    ): void {
+    private assertValidationFilesAreOurs(validation: ValidationMode): void {
         if (validation !== 'zod') return
-        for (const name of validationFileNames(format)) {
+        // The other format's name matters too: `./validation` would resolve to either
+        for (const name of [
+            ...validationFileNames('ts'),
+            ...validationFileNames('js'),
+        ]) {
             const file = path.join(this.outputDir, name)
             if (fs.existsSync(file) && !isGeneratedValidationFile(file)) {
                 throw new Error(
@@ -249,7 +250,7 @@ export class Generator {
         // Compile all files together
         const program = ts.createProgram(fileNames, compilerOptions, host)
         const emitted = program.emit()
-        // An unresolvable import silently degrades declarations to `any`
+        // Declaration emit can fail on its own (e.g. TS7056) after the type check passed
         if (emitted.diagnostics.length > 0) {
             throw new Error(
                 `Failed to emit the generated client:\n${ts.formatDiagnostics(

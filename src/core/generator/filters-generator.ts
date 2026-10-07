@@ -107,8 +107,9 @@ export type RelationFilter<T> = {
   id?: number | IdFilterOperators
   documentId?: string | StringFilterOperators
 } & {
+  // A related biginteger reads as string, but its filters take numbers too
   [K in keyof T]?: T[K] extends string
-    ? string | StringFilterOperators | BigIntFilterOperators
+    ? string | number | StringFilterOperators | BigIntFilterOperators
     : T[K] extends number
     ? number | NumberFilterOperators
     : T[K] extends boolean

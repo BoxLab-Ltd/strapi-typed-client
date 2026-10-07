@@ -425,6 +425,71 @@ describe('generated Zod validators', () => {
         }
     })
 
+    it('handles an empty dynamic zone and a null default', async () => {
+        const edgeDir = repoTmpDir('validation-edge-')
+        try {
+            await new Generator(edgeDir).generate(
+                {
+                    contentTypes: [
+                        ...mockSchema.contentTypes,
+                        {
+                            ...probe,
+                            attributes: [
+                                ...probe.attributes,
+                                {
+                                    name: 'nulled',
+                                    type: { kind: 'string' },
+                                    required: true,
+                                    defaultValue: null,
+                                },
+                            ],
+                            dynamicZones: [
+                                {
+                                    name: 'empty',
+                                    components: [],
+                                    componentTypes: [],
+                                    required: false,
+                                },
+                            ],
+                        },
+                    ],
+                    components: schema.components,
+                },
+                { format: 'ts', validation: 'zod' },
+            )
+            const types = fs.readFileSync(
+                path.join(edgeDir, 'types.ts'),
+                'utf-8',
+            )
+            const create = types.slice(
+                types.indexOf('export interface ProbeCreateInput'),
+            )
+            expect(create).toMatch(/\n\s+nulled: string\n/)
+        } finally {
+            fs.rmSync(edgeDir, { recursive: true, force: true })
+        }
+    })
+
+    it('refuses a content type and a component that share a name', async () => {
+        const clashDir = repoTmpDir('validation-clash-')
+        try {
+            await expect(
+                new Generator(clashDir).generate(
+                    {
+                        contentTypes: [
+                            ...mockSchema.contentTypes,
+                            { ...probe, cleanName: 'ProbePart' },
+                        ],
+                        components: schema.components,
+                    },
+                    { format: 'ts', validation: 'zod' },
+                ),
+            ).rejects.toThrow(/both map to ProbePart/)
+        } finally {
+            fs.rmSync(clashDir, { recursive: true, force: true })
+        }
+    })
+
     it('never injects values the caller did not send', () => {
         expect(v.ProbeCreateInputSchema.parse(ok)).toEqual(ok)
     })
@@ -456,18 +521,29 @@ type Same<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false
 ${all.map(n => `const _${n}: Same<z.input<typeof V.${n}Schema>, T.${n}> = true`).join('\n')}
 `
             fs.writeFileSync(path.join(dir, 'agreement.ts'), assertions)
-            const program = ts.createProgram([path.join(dir, 'agreement.ts')], {
-                target: ts.ScriptTarget.ES2022,
-                module: ts.ModuleKind.ES2022,
-                moduleResolution: ts.ModuleResolutionKind.Bundler,
-                strict: true,
-                noEmit: true,
-                skipLibCheck: true,
-            })
-            const errors = ts
-                .getPreEmitDiagnostics(program)
-                .map(d => ts.flattenDiagnosticMessageText(d.messageText, '\n'))
-            expect(errors).toEqual([])
+            for (const exactOptionalPropertyTypes of [false, true]) {
+                const program = ts.createProgram(
+                    [path.join(dir, 'agreement.ts')],
+                    {
+                        target: ts.ScriptTarget.ES2022,
+                        module: ts.ModuleKind.ES2022,
+                        moduleResolution: ts.ModuleResolutionKind.Bundler,
+                        strict: true,
+                        exactOptionalPropertyTypes,
+                        noEmit: true,
+                        skipLibCheck: true,
+                    },
+                )
+                const errors = ts
+                    .getPreEmitDiagnostics(program)
+                    .map(d =>
+                        ts.flattenDiagnosticMessageText(d.messageText, '\n'),
+                    )
+                expect({ exactOptionalPropertyTypes, errors }).toEqual({
+                    exactOptionalPropertyTypes,
+                    errors: [],
+                })
+            }
         } finally {
             fs.rmSync(dir, { recursive: true, force: true })
         }

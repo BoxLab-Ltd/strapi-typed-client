@@ -165,7 +165,10 @@ export const MultiMediaInputSchema = z.array(StrapiIDSchema).nullable()
                 const members = field.componentTypes.map(
                     ct => `${ct}Dz${mode}InputSchema`,
                 )
-                schema = `z.array(z.discriminatedUnion('__component', [${members.join(', ')}]))`
+                schema =
+                    members.length === 0
+                        ? 'z.array(z.never())'
+                        : `z.array(z.discriminatedUnion('__component', [${members.join(', ')}]))`
                 break
             }
             case 'locale':
@@ -195,6 +198,7 @@ export class ValidationGenerator {
     ) {}
 
     generate(schema: ParsedSchema): string {
+        assertUniqueInputNames(schema)
         const out = [this.emitter.header(), this.emitter.shared()]
         const dzUids = dzComponentUids(schema)
 
@@ -271,4 +275,17 @@ function componentsInDependencyOrder(schema: ParsedSchema): Component[] {
 
     for (const component of schema.components) visit(component)
     return ordered
+}
+
+// The TS interfaces of a colliding pair merge silently; the schema constants cannot
+function assertUniqueInputNames(schema: ParsedSchema): void {
+    const components = new Map(schema.components.map(c => [c.cleanName, c.uid]))
+    for (const contentType of schema.contentTypes) {
+        const uid = components.get(contentType.cleanName)
+        if (uid) {
+            throw new Error(
+                `Content type ${contentType.name} and component ${uid} both map to ${contentType.cleanName}, so their validators would share a name. Rename one of them to use --validation zod.`,
+            )
+        }
+    }
 }
