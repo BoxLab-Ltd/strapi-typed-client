@@ -156,21 +156,43 @@ export class TypesGenerator {
 export type StrapiID = string | number
 
 /**
+ * Where a connected relation lands in an ordered relation list.
+ */
+export interface RelationPosition {
+  before?: StrapiID
+  after?: StrapiID
+  start?: true
+  end?: true
+}
+
+/**
+ * Object form of a relation target. Strapi v5 accepts it wherever a plain id is accepted;
+ * \`locale\` / \`status\` pick the localized or draft version of the target document.
+ */
+export interface RelationRef {
+  documentId?: string
+  id?: number
+  locale?: string | null
+  status?: 'draft' | 'published'
+  position?: RelationPosition
+}
+
+/**
  * Explicit relation operations supported by Strapi v5.
  * See: https://docs.strapi.io/cms/api/rest/relations
  */
 export interface RelationOperations {
-  connect?: StrapiID[] | { documentId: string; position?: { before?: StrapiID; after?: StrapiID; start?: true; end?: true } }[]
-  disconnect?: StrapiID[]
-  set?: StrapiID[]
+  connect?: (StrapiID | RelationRef)[]
+  disconnect?: (StrapiID | RelationRef)[]
+  set?: (StrapiID | RelationRef)[]
 }
 
 /**
  * Input value for a relation field in create/update payloads.
- * Accepts a single id, an array of ids, or the explicit { connect | disconnect | set } form.
+ * Accepts an id or reference, an array of them, or the explicit { connect | disconnect | set } form.
  * Passing a plain id or array is equivalent to 'set' — it overwrites existing relations.
  */
-export type RelationInput = StrapiID | StrapiID[] | RelationOperations | null
+export type RelationInput = StrapiID | RelationRef | (StrapiID | RelationRef)[] | RelationOperations | null
 
 /**
  * Input value for a single media file field. Accepts a documentId (string) or
@@ -511,10 +533,13 @@ type _ApplyFields<TFull, TBase, TEntry> = TEntry extends true ? TFull : TEntry e
             props.push({ name: 'id', type: 'number', hasQuestionToken: true })
         }
         for (const attr of type.attributes) {
+            // Strapi applies a schema default before checking `required`
+            const hasDefault = attr.defaultValue !== undefined
             props.push({
                 name: attr.name,
                 type: this.transformer.toTypeScript(attr.type, attr.required),
-                hasQuestionToken: mode === 'Update' || !attr.required,
+                hasQuestionToken:
+                    mode === 'Update' || !attr.required || hasDefault,
                 ...this.docsFor(attr),
             })
         }
@@ -536,19 +561,31 @@ type _ApplyFields<TFull, TBase, TEntry> = TEntry extends true ? TFull : TEntry e
                 hasQuestionToken: true,
             })
         }
+        // Strapi rejects null for repeatable components and dynamic zones, and
+        // enforces `required` on a single component (unlike relations/media).
         for (const compField of type.components) {
             const inner = `${compField.componentType}${mode}Input`
-            const compType = compField.repeatable ? `${inner}[]` : inner
+            const required = compField.required && !compField.repeatable
             props.push({
                 name: compField.name,
-                type: `${compType} | null`,
-                hasQuestionToken: true,
+                type: compField.repeatable
+                    ? `${inner}[]`
+                    : required
+                      ? inner
+                      : `${inner} | null`,
+                hasQuestionToken: mode === 'Update' || !required,
             })
         }
         for (const dzField of type.dynamicZones) {
+            const members = dzField.componentTypes.map(
+                ct => `${ct}Dz${mode}Input`,
+            )
             props.push({
                 name: dzField.name,
-                type: `(${dzField.componentTypes.map(ct => `${ct}Dz${mode}Input`).join(' | ')})[] | null`,
+                type:
+                    members.length === 1
+                        ? `${members[0]}[]`
+                        : `(${members.join(' | ')})[]`,
                 hasQuestionToken: true,
             })
         }
@@ -595,7 +632,15 @@ type _ApplyFields<TFull, TBase, TEntry> = TEntry extends true ? TFull : TEntry e
                 name: `${contentType.cleanName}${mode}Input`,
                 docs: [`${mode} input for ${contentType.cleanName}`],
                 isExported: true,
-                properties: this.buildInputProperties(contentType, mode, false),
+                properties: [
+                    ...this.buildInputProperties(contentType, mode, false),
+                    { name: 'locale', type: 'string', hasQuestionToken: true },
+                    {
+                        name: 'publishedAt',
+                        type: 'string | null',
+                        hasQuestionToken: true,
+                    },
+                ],
             })
         }
     }

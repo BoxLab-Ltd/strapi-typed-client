@@ -277,13 +277,13 @@ describe('TypesGenerator', () => {
         it('should generate RelationOperations interface with connect/disconnect/set', () => {
             expect(output).toContain('export interface RelationOperations {')
             expect(output).toContain('connect?:')
-            expect(output).toContain('disconnect?: StrapiID[]')
-            expect(output).toContain('set?: StrapiID[]')
+            expect(output).toContain('disconnect?: (StrapiID | RelationRef)[]')
+            expect(output).toContain('set?: (StrapiID | RelationRef)[]')
         })
 
         it('should generate RelationInput union with scalar, array, and operations forms', () => {
             expect(output).toContain(
-                'export type RelationInput = StrapiID | StrapiID[] | RelationOperations | null',
+                'export type RelationInput = StrapiID | RelationRef | (StrapiID | RelationRef)[] | RelationOperations | null',
             )
         })
 
@@ -397,12 +397,8 @@ describe('TypesGenerator', () => {
             expect(output).toContain('  images?: MultiMediaInput')
             expect(output).toContain('  items?: RelationInput')
             expect(output).toContain('  owner?: RelationInput')
-            expect(output).toContain(
-                '  config?: ProjectConfigCreateInput[] | null',
-            )
-            expect(output).toContain(
-                '  config?: ProjectConfigUpdateInput[] | null',
-            )
+            expect(output).toContain('  config?: ProjectConfigCreateInput[];')
+            expect(output).toContain('  config?: ProjectConfigUpdateInput[];')
         })
 
         it('ProjectConfigCreateInput has no __component (regular component, not DZ)', () => {
@@ -433,10 +429,10 @@ describe('TypesGenerator', () => {
 
         it('DZ field uses the *DzCreateInput / *DzUpdateInput unions', () => {
             expect(output).toMatch(
-                /sections\?: \(LandingHeroDzCreateInput \| LandingFeatureDzCreateInput\)\[\] \| null/,
+                /sections\?: \(LandingHeroDzCreateInput \| LandingFeatureDzCreateInput\)\[\];/,
             )
             expect(output).toMatch(
-                /sections\?: \(LandingHeroDzUpdateInput \| LandingFeatureDzUpdateInput\)\[\] \| null/,
+                /sections\?: \(LandingHeroDzUpdateInput \| LandingFeatureDzUpdateInput\)\[\];/,
             )
         })
     })
@@ -747,6 +743,146 @@ describe('TypesGenerator', () => {
             )
             expect(out).toContain(
                 'export const LandingHeroDzDefaults = { __component: "landing.hero", title: "Hello" } as const satisfies Partial<LandingHeroDzCreateInput>',
+            )
+        })
+    })
+
+    describe('Input types follow the live Strapi contract', () => {
+        const sliceInterface = (src: string, header: string): string => {
+            const start = src.indexOf(header)
+            if (start === -1) return ''
+            const next = src.indexOf('\nexport ', start + header.length)
+            return src.slice(start, next === -1 ? undefined : next)
+        }
+
+        const schema: ParsedSchema = {
+            contentTypes: [
+                {
+                    name: 'ApiProbeProbe',
+                    cleanName: 'Probe',
+                    collectionName: 'probes',
+                    singularName: 'probe',
+                    pluralName: 'probes',
+                    kind: 'collection',
+                    attributes: [
+                        {
+                            name: 'withDefault',
+                            type: { kind: 'string' },
+                            required: true,
+                            defaultValue: 'dflt',
+                        },
+                        {
+                            name: 'quoted',
+                            type: {
+                                kind: 'enumeration',
+                                values: ["it's", 'a\\b'],
+                            },
+                            required: false,
+                        },
+                        {
+                            name: 'none',
+                            type: { kind: 'enumeration', values: [] },
+                            required: false,
+                        },
+                    ],
+                    relations: [],
+                    media: [],
+                    components: [
+                        {
+                            name: 'reqPart',
+                            component: 'probe.part',
+                            componentType: 'ProbePart',
+                            repeatable: false,
+                            required: true,
+                        },
+                        {
+                            name: 'part',
+                            component: 'probe.part',
+                            componentType: 'ProbePart',
+                            repeatable: false,
+                            required: false,
+                        },
+                        {
+                            name: 'parts',
+                            component: 'probe.part',
+                            componentType: 'ProbePart',
+                            repeatable: true,
+                            required: false,
+                        },
+                    ],
+                    dynamicZones: [
+                        {
+                            name: 'zone',
+                            components: ['probe.part'],
+                            componentTypes: ['ProbePart'],
+                            required: false,
+                        },
+                    ],
+                },
+            ],
+            components: [
+                {
+                    name: 'ProbePart',
+                    cleanName: 'ProbePart',
+                    category: 'probe',
+                    uid: 'probe.part',
+                    attributes: [
+                        {
+                            name: 'label',
+                            type: { kind: 'string' },
+                            required: true,
+                        },
+                    ],
+                    relations: [],
+                    media: [],
+                    components: [],
+                    dynamicZones: [],
+                },
+            ],
+        }
+
+        const out = new TypesGenerator().generate(schema)
+        const create = sliceInterface(
+            out,
+            'export interface ProbeCreateInput {',
+        )
+        const update = sliceInterface(
+            out,
+            'export interface ProbeUpdateInput {',
+        )
+
+        it('lets a required field with a default be omitted on create, never nulled', () => {
+            expect(create).toContain('withDefault?: string;')
+        })
+
+        it('requires a required single component on create and never accepts null for it', () => {
+            expect(create).toContain('reqPart: ProbePartCreateInput;')
+            expect(update).toContain('reqPart?: ProbePartUpdateInput;')
+            expect(create).toContain('part?: ProbePartCreateInput | null;')
+        })
+
+        it('does not accept null for repeatable components or dynamic zones', () => {
+            expect(create).toContain('parts?: ProbePartCreateInput[];')
+            expect(create).toContain('zone?: ProbePartDzCreateInput[];')
+        })
+
+        it('accepts the top-level locale and publishedAt keys on content types only', () => {
+            expect(create).toContain('locale?: string;')
+            expect(create).toContain('publishedAt?: string | null;')
+            expect(
+                sliceInterface(out, 'export interface ProbePartCreateInput {'),
+            ).not.toContain('locale')
+        })
+
+        it('escapes enumeration literals and maps an empty enumeration to never', () => {
+            expect(create).toContain(`quoted?: "it's" | "a\\\\b" | null`)
+            expect(create).toContain('  none?: never | null')
+        })
+
+        it('accepts every relation reference form Strapi does', () => {
+            expect(out).toContain('export interface RelationRef {')
+            expect(out).toContain(
+                'export type RelationInput = StrapiID | RelationRef | (StrapiID | RelationRef)[] | RelationOperations | null',
             )
         })
     })

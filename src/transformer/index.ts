@@ -44,7 +44,9 @@ export class TypeTransformer {
                 return 'unknown'
 
             case 'enumeration':
-                return attrType.values.map(v => `'${v}'`).join(' | ')
+                return attrType.values.length > 0
+                    ? attrType.values.map(v => JSON.stringify(v)).join(' | ')
+                    : 'never'
 
             case 'media':
                 return attrType.multiple ? 'MediaFile[]' : 'MediaFile'

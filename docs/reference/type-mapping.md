@@ -67,7 +67,7 @@ const article = await strapi.articles.findOne('abc123', {
 
 ### Input Types (create/update)
 
-In input types, every relation is typed as `RelationInput` (`StrapiID | StrapiID[] | RelationOperations | null`, where `StrapiID = string | number`). A plain id or array is shorthand for `set`; the explicit `{ connect | disconnect | set }` form is also accepted:
+In input types, every relation is typed as `RelationInput` (`StrapiID | RelationRef | (StrapiID | RelationRef)[] | RelationOperations | null`, where `StrapiID = string | number` and `RelationRef` is the `{ documentId?, id?, locale?, status?, position? }` object form). A plain id or array is shorthand for `set`; the explicit `{ connect | disconnect | set }` form is also accepted:
 
 | Relation Type | Input TypeScript Type |
 | ------------- | --------------------- |

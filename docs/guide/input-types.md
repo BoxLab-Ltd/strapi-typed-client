@@ -41,10 +41,23 @@ In input types, every relation — regardless of cardinality — is typed as `Re
 ```ts
 type StrapiID = string | number
 
+type RelationRef = {
+    documentId?: string
+    id?: number
+    locale?: string | null // target a localized version
+    status?: 'draft' | 'published' // target the draft or published version
+    position?: { before?: StrapiID; after?: StrapiID; start?: true; end?: true }
+}
+
 type RelationInput =
     | StrapiID // a single id or documentId
-    | StrapiID[] // an array of ids
-    | { connect?: StrapiID[]; disconnect?: StrapiID[]; set?: StrapiID[] } // explicit relation operations
+    | RelationRef // a single reference object
+    | (StrapiID | RelationRef)[] // an array of either
+    | {
+          connect?: (StrapiID | RelationRef)[]
+          disconnect?: (StrapiID | RelationRef)[]
+          set?: (StrapiID | RelationRef)[]
+      }
     | null
 ```
 
