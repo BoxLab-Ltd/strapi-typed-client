@@ -30,6 +30,11 @@ const fixtures: Array<[string, Record<string, unknown>, string]> = [
         'populate[category][fields][0]=name&populate[category][fields][1]=slug&populate[image]=true',
     ],
     [
+        'populate count with filters',
+        { populate: { items: { count: true, filters: { run: { $gt: 0 } } } } },
+        'populate[items][count]=true&populate[items][filters][run][$gt]=0',
+    ],
+    [
         'sort array',
         { sort: ['name:asc', 'createdAt:desc'] },
         'sort[0]=name%3Aasc&sort[1]=createdAt%3Adesc',

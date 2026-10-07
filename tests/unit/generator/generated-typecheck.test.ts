@@ -39,7 +39,16 @@ const projectMeta: Component = {
     category: 'project',
     uid: 'project.meta',
     attributes: [{ name: 'slug', type: { kind: 'string' }, required: false }],
-    relations: [],
+    // a relation inside a plain (non-DZ) component, for populate count
+    relations: [
+        {
+            name: 'related',
+            relationType: 'manyToMany',
+            target: 'api::item.item',
+            targetType: 'Item',
+            required: false,
+        },
+    ],
     media: [],
     components: [
         {
@@ -220,6 +229,50 @@ async function _assert() {
   await client.widgets.find({ populate: { updatedBy: { fields: ['username'], filters: { firstname: { $eq: 'a' } } } } })
   // @ts-expect-error - creator fields are server-managed and rejected on write
   await client.widgets.create({ status: 'draft', createdBy: 1 })
+  // populate count: a relation comes back as { count } for any cardinality
+  type _Same<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false
+  type _Present<T> = Exclude<T, undefined>
+  const toMany = await client.projects.find({ populate: { items: { count: true } } })
+  const _toMany: _Same<_Present<(typeof toMany)[number]['items']>, { count: number }> = true
+  const toOne = await client.items.find({ populate: { category: { count: true } } })
+  const _toOne: _Same<_Present<(typeof toOne)[number]['category']>, { count: number }> = true
+  const one = await client.projects.findOne('id', { populate: { items: { count: true } } })
+  const _one: _Same<_Present<NonNullable<typeof one>['items']>, { count: number }> = true
+  await client.projects.find({ populate: { items: { count: true, filters: { title: { $eq: 'x' } } } } })
+  // count: false keeps the ordinary populate
+  const full = await client.projects.find({ populate: { items: { count: false, fields: ['title'] } } })
+  const _full: _Present<(typeof full)[number]['items']> extends unknown[] ? true : false = true
+  // @ts-expect-error - count cannot be combined with fields
+  await client.projects.find({ populate: { items: { count: true, fields: ['title'] } } })
+  // @ts-expect-error - count cannot be combined with a nested populate
+  await client.projects.find({ populate: { items: { count: true, populate: { category: true } } } })
+  // @ts-expect-error - count cannot be combined with sort
+  await client.projects.find({ populate: { items: { count: true, sort: 'title' } } })
+  // @ts-expect-error - count cannot be combined with pagination
+  await client.projects.find({ populate: { items: { count: true, limit: 5 } } })
+  // @ts-expect-error - Strapi ignores count on media
+  await client.items.find({ populate: { image: { count: true } } })
+  // @ts-expect-error - not even next to fields
+  await client.items.find({ populate: { image: { fields: ['url'], count: true } } })
+  // @ts-expect-error - Strapi ignores count on components
+  await client.projects.find({ populate: { config: { count: true } } })
+  // @ts-expect-error - Strapi ignores count on a dynamic zone
+  await client.projects.find({ populate: { sections: { on: { 'landing.hero': true }, count: true } } })
+  // @ts-expect-error - and on a dynamic-zone component
+  await client.projects.find({ populate: { sections: { on: { 'landing.feature': { fields: ['label'], count: true } } } } })
+  // nested count through a relation's populate
+  const nested = await client.projects.find({ populate: { items: { populate: { category: { count: true } } } } })
+  type _NestedItem = _Present<(typeof nested)[number]['items']>[number]
+  const _nested: _Same<_Present<_NestedItem['category']>, { count: number }> = true
+  // a relation inside a component
+  const comp = await client.widgets.find({ populate: { details: { populate: { related: { count: true } } } } })
+  type _Details = NonNullable<_Present<(typeof comp)[number]['details']>>
+  const _comp: _Same<_Present<_Details['related']>, { count: number }> = true
+  // a relation inside a dynamic-zone component
+  const dz = await client.projects.find({ populate: { sections: { on: { 'landing.feature': { populate: { item: { count: true } } } } } } })
+  type _Feature = Extract<_Present<(typeof dz)[number]['sections']>[number], { __component: 'landing.feature' }>
+  const _dz: _Same<_Present<_Feature['item']>, { count: number }> = true
+  void [_toMany, _toOne, _one, _full, _nested, _comp, _dz]
 }
 void _assert
 `

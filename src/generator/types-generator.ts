@@ -657,12 +657,17 @@ type _ApplyFields<TFull, TBase, TEntry> = TEntry extends true ? TFull : TEntry e
             options.push(`sort?: _SortValue<${t}> | _SortValue<${t}>[]`)
             options.push(`limit?: number`)
             options.push(`start?: number`)
-            fields.push(`  ${rel.name}?: true | { ${options.join('; ')} }`)
+            // Strapi answers { count } instead of the records and ignores the rest;
+            // `?: never` because populate is a generic, so excess keys go unchecked
+            const countOnly = `{ count: true; filters?: ${t}Filters; fields?: never; populate?: never; sort?: never; limit?: never; start?: never }`
+            fields.push(
+                `  ${rel.name}?: true | ${countOnly} | { count?: false; ${options.join('; ')} }`,
+            )
         }
 
         for (const media of type.media) {
             fields.push(
-                `  ${media.name}?: true | { fields?: (keyof MediaFile & string)[] }`,
+                `  ${media.name}?: true | { fields?: (keyof MediaFile & string)[]; count?: never }`,
             )
         }
 
@@ -675,6 +680,7 @@ type _ApplyFields<TFull, TBase, TEntry> = TEntry extends true ? TFull : TEntry e
                     `populate?: ${t}PopulateParam | (keyof ${t}PopulateParam & string)[] | '*'`,
                 )
             }
+            options.push('count?: never')
             fields.push(`  ${comp.name}?: true | { ${options.join('; ')} }`)
         }
 
@@ -690,10 +696,11 @@ type _ApplyFields<TFull, TBase, TEntry> = TEntry extends true ? TFull : TEntry e
                         `populate?: ${cleanType}PopulateParam | (keyof ${cleanType}PopulateParam & string)[] | '*'`,
                     )
                 }
+                options.push('count?: never')
                 onEntries.push(`'${uid}'?: true | { ${options.join('; ')} }`)
             }
             fields.push(
-                `  ${dz.name}?: true | { on?: { ${onEntries.join('; ')} } }`,
+                `  ${dz.name}?: true | { on?: { ${onEntries.join('; ')} }; count?: never }`,
             )
         }
 
@@ -866,8 +873,9 @@ ${perFieldPop}
                 ? `_ApplyFields<Pop['${rel.name}'] extends { populate: infer NestedPop } ? ${baseType}GetPayload<{ populate: NestedPop }> : ${baseType}, ${baseType}, Pop['${rel.name}']>${arraySuffix}${nullSuffix}`
                 : `_ApplyFields<${baseType}, ${baseType}, Pop['${rel.name}']>${arraySuffix}${nullSuffix}`
 
+            // A count is an object for every cardinality, never an array or null
             fields.push(
-                `          ${rel.name}?: '${rel.name}' extends keyof Pop\n            ? ${resolvedType}\n            : never`,
+                `          ${rel.name}?: '${rel.name}' extends keyof Pop\n            ? Pop['${rel.name}'] extends { count: true }\n              ? { count: number }\n              : ${resolvedType}\n            : never`,
             )
         }
 

@@ -453,7 +453,7 @@ describe('TypesGenerator', () => {
             expect(output).toContain('export type ItemPopulateParam = {')
             expect(output).toContain('  category?: true | {')
             expect(output).toContain(
-                '  image?: true | { fields?: (keyof MediaFile & string)[] }',
+                '  image?: true | { fields?: (keyof MediaFile & string)[]; count?: never }',
             )
         })
 
@@ -462,7 +462,7 @@ describe('TypesGenerator', () => {
             expect(output).toContain('  items?: true | {')
             expect(output).toContain('  owner?: true | {')
             expect(output).toContain(
-                '  images?: true | { fields?: (keyof MediaFile & string)[] }',
+                '  images?: true | { fields?: (keyof MediaFile & string)[]; count?: never }',
             )
             expect(output).toContain('  config?: true | {')
             expect(output).toContain('  sections?: true | { on?: {')
@@ -480,8 +480,30 @@ describe('TypesGenerator', () => {
 
         it('PopulateParam media should have true | { fields?: (keyof MediaFile & string)[] }', () => {
             expect(output).toContain(
-                'image?: true | { fields?: (keyof MediaFile & string)[] }',
+                'image?: true | { fields?: (keyof MediaFile & string)[]; count?: never }',
             )
+        })
+
+        it('offers a count-only variant on relations that admits filters alone', () => {
+            expect(output).toContain(
+                '  category?: true | { count: true; filters?: CategoryFilters; fields?: never; populate?: never; sort?: never; limit?: never; start?: never } | { count?: false; fields?: _EntityField<Category>[];',
+            )
+        })
+
+        it('rules count out on components', () => {
+            expect(output).toMatch(
+                /config\?: true \| \{ fields\?: \(keyof ProjectConfig & string\)\[\][^}]*count\?: never \}/,
+            )
+        })
+
+        it('types a counted relation as { count: number } in GetPayload', () => {
+            expect(output).toMatch(
+                /category\?: 'category' extends keyof Pop\s+\? Pop\['category'\] extends \{ count: true \}\s+\? \{ count: number \}/,
+            )
+        })
+
+        it('generates the same output for the same schema', () => {
+            expect(new TypesGenerator().generate(mockSchema)).toBe(output)
         })
 
         it('PopulateParam component should have fields and populate options', () => {

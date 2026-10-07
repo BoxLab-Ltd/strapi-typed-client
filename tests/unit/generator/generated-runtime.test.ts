@@ -58,6 +58,20 @@ describe('generated client runtime behaviour', () => {
 
     afterAll(() => fs.rmSync(tmpDir, { recursive: true, force: true }))
 
+    it('sends a populate count, with its filters, as Strapi expects', async () => {
+        const { fetch, calls } = recordingFetch(() => json({ data: [] }))
+        const client = new StrapiClient({ baseURL: 'http://x', fetch })
+        await client.projects.find({
+            populate: {
+                items: { count: true, filters: { title: { $eq: 'a' } } },
+            },
+        })
+        const query = decodeURIComponent(calls[0]!.url.split('?')[1] ?? '')
+        expect(query).toBe(
+            'populate[items][count]=true&populate[items][filters][title][$eq]=a',
+        )
+    })
+
     it('onRequest mutating in place reaches fetch', async () => {
         const { fetch, calls } = recordingFetch(() => json({ data: [] }))
         const client = new StrapiClient({
