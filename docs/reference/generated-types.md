@@ -154,7 +154,9 @@ For each content type and component that has populatable fields, a `PopulatePara
 export type ArticlePopulateParam = {
     category?:
         | true
+        | { count: true; filters?: CategoryFilters } // { count: number } in the result
         | {
+              count?: false
               fields?: (keyof Category & string)[]
               populate?:
                   | CategoryPopulateParam
@@ -190,6 +192,7 @@ Populate params support:
 
 - `true` for simple population.
 - Object syntax with `fields`, `filters`, `sort`, `limit`, `start` for fine-grained control.
+- `{ count: true }` on relations (optionally with `filters`) to get `{ count: number }` instead of the records — see [Counting Relations](/guide/populate#counting-relations).
 - Nested `populate` for deep population chains.
 - Dynamic zone `on` syntax for component-specific options.
 

@@ -87,6 +87,44 @@ const result = await strapi.articles.find({
 })
 ```
 
+## Counting Relations
+
+When you only need how many related records there are, ask for the count instead of the records. Strapi answers with `{ count }` in place of the relation:
+
+```ts
+const categories = await strapi.categories.find({
+    populate: { items: { count: true } },
+})
+
+categories[0].items // { count: number } | undefined
+```
+
+The result is `{ count: number }` for every relation cardinality — to-many and to-one alike, never an array or `null`.
+
+`filters` narrow what is counted, matching the `meta.pagination.total` the same filter would give on the related collection:
+
+```ts
+const categories = await strapi.categories.find({
+    populate: { items: { count: true, filters: { run: { $gt: 0 } } } },
+})
+```
+
+Counting works anywhere a relation can be populated — in `findOne`, inside a nested `populate`, and for relations inside components and dynamic-zone components:
+
+```ts
+const items = await strapi.items.find({
+    populate: { category: { populate: { items: { count: true } } } },
+})
+
+items[0].category?.items // { count: number } | undefined
+```
+
+Limits, enforced by the types:
+
+- `count` combines with `filters` only. Strapi ignores `fields`, `populate`, `sort` and pagination next to it, so `{ count: true, fields: [...] }` is a type error.
+- `count` exists on relations only. Strapi ignores it on media and components and returns the full value, so it is not offered there.
+- `count: false` is an ordinary populate.
+
 ## How Type Inference Works
 
 The generated types include conditional type definitions that map populate parameters to return types. When you write:

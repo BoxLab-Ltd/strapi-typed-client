@@ -67,7 +67,7 @@ articles[0].category.name // fully typed
 - Built-in i18n support — `client.i18n.locales()` for the configured locales
 - Typed errors with `isStrapiErrorOf` for discriminated narrowing
 - Session auth (Strapi 5.43+ `jwtManagement: 'refresh'`) — auto-detected, with transparent token refresh
-- Automatic type inference for `populate` — no manual casting
+- Automatic type inference for `populate` — no manual casting, relation counts included (`{ count: true }`)
 - Nested populate with unlimited depth
 - Separate Input types for create/update (relations as IDs)
 - Optional Zod 4 validators for every create/update input (`--validation zod`) — same rules as the live Strapi API
