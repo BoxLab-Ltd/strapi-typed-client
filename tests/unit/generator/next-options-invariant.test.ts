@@ -113,16 +113,12 @@ describe.each(['legacy', 'refresh'] as const)(
             tmpDir = fs.mkdtempSync(
                 path.join(os.tmpdir(), 'strapi-types-next-'),
             )
-            await new Generator(tmpDir).generate(
-                mockSchema,
+            await new Generator(tmpDir).generate(mockSchema, {
                 endpoints,
-                undefined,
-                '',
-                '',
-                'ts',
-                true,
+                format: 'ts',
+                typecheck: true,
                 authMode,
-            )
+            })
             methods = parseMethods(
                 fs.readFileSync(path.join(tmpDir, 'client.ts'), 'utf-8'),
             )

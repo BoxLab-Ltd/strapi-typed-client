@@ -123,26 +123,18 @@ describe('generated client session-auth runtime behaviour', () => {
     beforeAll(async () => {
         refreshDir = fs.mkdtempSync(path.join(os.tmpdir(), 'strapi-types-sa-'))
         legacyDir = fs.mkdtempSync(path.join(os.tmpdir(), 'strapi-types-sl-'))
-        await new Generator(refreshDir).generate(
-            mockSchema,
-            [],
-            undefined,
-            '',
-            '',
-            'js',
-            true,
-            'refresh',
-        )
-        await new Generator(legacyDir).generate(
-            mockSchema,
-            [],
-            undefined,
-            '',
-            '',
-            'js',
-            true,
-            'legacy',
-        )
+        await new Generator(refreshDir).generate(mockSchema, {
+            endpoints: [],
+            format: 'js',
+            typecheck: true,
+            authMode: 'refresh',
+        })
+        await new Generator(legacyDir).generate(mockSchema, {
+            endpoints: [],
+            format: 'js',
+            typecheck: true,
+            authMode: 'legacy',
+        })
         RefreshClient = (
             await import(pathToFileURL(path.join(refreshDir, 'index.js')).href)
         ).StrapiClient

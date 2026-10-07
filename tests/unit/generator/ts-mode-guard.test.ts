@@ -47,7 +47,7 @@ describe('--format ts type-check guard', () => {
         injectBrokenClient(gen)
 
         await expect(
-            gen.generate(mockSchema, [], undefined, '', '', 'ts'),
+            gen.generate(mockSchema, { endpoints: [], format: 'ts' }),
         ).rejects.toThrow(/failed type-checking/)
 
         for (const f of OUTPUT_FILES) {
@@ -65,7 +65,7 @@ describe('--format ts type-check guard', () => {
         injectBrokenClient(gen)
 
         await expect(
-            gen.generate(mockSchema, [], undefined, '', '', 'ts'),
+            gen.generate(mockSchema, { endpoints: [], format: 'ts' }),
         ).rejects.toThrow(/failed type-checking/)
 
         expect(fs.existsSync(target)).toBe(false)
@@ -77,7 +77,11 @@ describe('--format ts type-check guard', () => {
         const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
 
         await expect(
-            gen.generate(mockSchema, [], undefined, '', '', 'ts', false),
+            gen.generate(mockSchema, {
+                endpoints: [],
+                format: 'ts',
+                typecheck: false,
+            }),
         ).resolves.toBeUndefined()
 
         expect(warn).toHaveBeenCalledWith(

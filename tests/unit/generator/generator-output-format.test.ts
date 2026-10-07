@@ -83,14 +83,7 @@ describe("Generator with format: 'ts'", () => {
 
     beforeAll(async () => {
         tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'strapi-types-ts-'))
-        await new Generator(tmpDir).generate(
-            mockSchema,
-            undefined,
-            undefined,
-            '',
-            '',
-            'ts',
-        )
+        await new Generator(tmpDir).generate(mockSchema, { format: 'ts' })
     })
 
     afterAll(() => fs.rmSync(tmpDir, { recursive: true, force: true }))
@@ -124,14 +117,7 @@ describe("Generator with format: 'js'", () => {
 
     beforeAll(async () => {
         tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'strapi-types-js-'))
-        await new Generator(tmpDir).generate(
-            mockSchema,
-            undefined,
-            undefined,
-            '',
-            '',
-            'js',
-        )
+        await new Generator(tmpDir).generate(mockSchema, { format: 'js' })
     })
 
     afterAll(() => fs.rmSync(tmpDir, { recursive: true, force: true }))

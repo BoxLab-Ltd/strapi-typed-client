@@ -211,16 +211,15 @@ export async function generate(
         // lazy: keeps the typescript compiler out of init/check/--help startup
         const { Generator } = await import('../../generator/index.js')
         const generator = new Generator(outputDir)
-        await generator.generate(
-            parsedSchema,
+        await generator.generate(parsedSchema, {
             endpoints,
             extraTypes,
-            hash,
-            getGeneratorVersion(),
+            schemaHash: hash,
+            generatorVersion: getGeneratorVersion(),
             format,
-            options.typecheck ?? true,
-            authMode ?? 'legacy',
-        )
+            typecheck: options.typecheck ?? true,
+            authMode: authMode ?? 'legacy',
+        })
 
         // Track generated files
         const emittedFiles =

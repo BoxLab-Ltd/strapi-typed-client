@@ -60,14 +60,10 @@ describe.each([
 
     beforeAll(async () => {
         tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'strapi-types-resp-'))
-        await new Generator(tmpDir).generate(
-            mockSchema,
+        await new Generator(tmpDir).generate(mockSchema, {
             endpoints,
-            undefined,
-            '',
-            '',
-            'js',
-        )
+            format: 'js',
+        })
         const mod = await import(
             pathToFileURL(path.join(tmpDir, 'index.js')).href
         )

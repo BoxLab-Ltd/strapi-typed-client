@@ -19,6 +19,16 @@ function stripLocalJsExtensions(source: string): string {
     )
 }
 
+export interface GenerateOptions {
+    endpoints?: ParsedEndpoint[]
+    extraTypes?: ExtraControllerType[]
+    schemaHash?: string
+    generatorVersion?: string
+    format?: 'js' | 'ts'
+    typecheck?: boolean
+    authMode?: AuthMode
+}
+
 export class Generator {
     private outputDir: string
     private typesGenerator: TypesGenerator
@@ -34,13 +44,15 @@ export class Generator {
 
     async generate(
         schema: ParsedSchema,
-        endpoints?: ParsedEndpoint[],
-        extraTypes?: ExtraControllerType[],
-        schemaHash: string = '',
-        generatorVersion: string = '',
-        format: 'js' | 'ts' = 'js',
-        typecheck: boolean = true,
-        authMode: AuthMode = 'legacy',
+        {
+            endpoints,
+            extraTypes,
+            schemaHash = '',
+            generatorVersion = '',
+            format = 'js',
+            typecheck = true,
+            authMode = 'legacy',
+        }: GenerateOptions = {},
     ): Promise<void> {
         // Generate all source contents
         const typesContent = this.typesGenerator.generate(schema)

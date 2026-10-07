@@ -46,14 +46,10 @@ describe('generated client runtime behaviour', () => {
 
     beforeAll(async () => {
         tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'strapi-types-rt-'))
-        await new Generator(tmpDir).generate(
-            mockSchema,
-            [],
-            undefined,
-            '',
-            '',
-            'js',
-        )
+        await new Generator(tmpDir).generate(mockSchema, {
+            endpoints: [],
+            format: 'js',
+        })
         const mod = await import(
             pathToFileURL(path.join(tmpDir, 'index.js')).href
         )

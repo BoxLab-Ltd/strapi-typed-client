@@ -231,14 +231,10 @@ describe('generated client type-checks clean without @ts-nocheck', () => {
 
     beforeAll(async () => {
         tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'strapi-types-tc-'))
-        await new Generator(tmpDir).generate(
-            schema,
+        await new Generator(tmpDir).generate(schema, {
             endpoints,
-            undefined,
-            '',
-            '',
-            'ts',
-        )
+            format: 'ts',
+        })
         clientSource = fs.readFileSync(path.join(tmpDir, 'client.ts'), 'utf-8')
 
         const files = ['types.ts', 'client.ts', 'index.ts'].map(f =>
