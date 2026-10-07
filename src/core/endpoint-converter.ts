@@ -106,7 +106,6 @@ const TS_BUILTIN_TYPES = new Set([
  * (imported, never shipped) — emitting those would produce `Cannot find name`
  * errors. Replace any capitalised identifier that isn't a TS built-in or a
  * known generated/local type with `unknown` so the client always compiles.
- * Full cross-module resolution is deferred to the ts-morph Endpoints parser.
  *
  * Heuristic and deliberately conservative: string literals are masked so names
  * inside them are left alone, and identifiers in object-key position (followed
@@ -271,8 +270,7 @@ export function convertEndpointsToCustomTypes(
         }
 
         // If any referenced name couldn't be resolved we degraded it to
-        // `unknown` — leave a discoverable note in the committed output. Full
-        // cross-module resolution is deferred to the ts-morph Endpoints parser.
+        // `unknown` — leave a discoverable note in the committed output.
         if (unresolved.size > 0) {
             namespaceLines.splice(
                 1,

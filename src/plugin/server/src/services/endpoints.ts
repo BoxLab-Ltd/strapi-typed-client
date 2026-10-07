@@ -5,6 +5,10 @@
 
 import * as fs from 'fs'
 import * as path from 'path'
+import {
+    parseControllerSource,
+    type ParsedControllerSource,
+} from './endpoint-parser.js'
 import type {
     EndpointType,
     ParsedEndpoint,
@@ -73,236 +77,53 @@ function parseHandler(handler: string): { controller: string; action: string } {
     }
 }
 
-/**
- * Extract a balanced block of braces from content starting at position
- */
-function extractBalancedBraces(
-    content: string,
-    startPos: number,
-): string | null {
-    if (content[startPos] !== '{') return null
+type TypeScriptModule = typeof import('typescript')
 
-    let depth = 0
-    let i = startPos
+let typescriptModule: Promise<TypeScriptModule | null> | undefined
 
-    while (i < content.length) {
-        if (content[i] === '{') depth++
-        else if (content[i] === '}') depth--
-
-        if (depth === 0) {
-            return content.slice(startPos + 1, i) // Return content inside braces
-        }
-        i++
-    }
-
-    return null
+function loadTypeScript(): Promise<TypeScriptModule | null> {
+    typescriptModule ??= import('typescript').then(
+        mod => (mod as { default?: TypeScriptModule }).default ?? mod,
+        () => null,
+    )
+    return typescriptModule
 }
 
-/**
- * Extract Endpoints interface from a TypeScript controller file
- */
-function parseEndpointsFromFile(
-    filePath: string,
-): Record<string, EndpointType> | null {
-    try {
-        if (!fs.existsSync(filePath)) {
-            return null
-        }
+const controllerCache = new Map<
+    string,
+    { mtimeMs: number; size: number; parsed: ParsedControllerSource }
+>()
 
-        const content = fs.readFileSync(filePath, 'utf-8')
-
-        // Find "export interface Endpoints {"
-        const startMatch = content.match(/export\s+interface\s+Endpoints\s*\{/)
-        if (!startMatch || startMatch.index === undefined) {
-            return null
-        }
-
-        const braceStart = startMatch.index + startMatch[0].length - 1
-        const endpointsBlock = extractBalancedBraces(content, braceStart)
-
-        if (!endpointsBlock) {
-            return null
-        }
-
-        const result: Record<string, EndpointType> = {}
-
-        // Find each action: "actionName: {"
-        const actionStartPattern = /(\w+)\s*:\s*\{/g
-        let actionMatch
-
-        while (
-            (actionMatch = actionStartPattern.exec(endpointsBlock)) !== null
-        ) {
-            const actionName = actionMatch[1]
-            const actionBraceStart =
-                actionMatch.index + actionMatch[0].length - 1
-            const actionBlock = extractBalancedBraces(
-                endpointsBlock,
-                actionBraceStart,
-            )
-
-            if (!actionBlock) continue
-
-            const types: EndpointType = {}
-
-            // Extract body type - handle nested braces
-            const bodyStartMatch = actionBlock.match(/body\s*[?]?\s*:\s*/)
-            if (bodyStartMatch && bodyStartMatch.index !== undefined) {
-                const afterBody = actionBlock.slice(
-                    bodyStartMatch.index + bodyStartMatch[0].length,
-                )
-                if (afterBody.startsWith('{')) {
-                    const bodyBlock = extractBalancedBraces(afterBody, 0)
-                    if (bodyBlock) {
-                        types.body = `{ ${bodyBlock} }`
-                    }
-                } else {
-                    // Simple type like "void" or "string"
-                    const simpleMatch = afterBody.match(/^([^;\n}]+)/)
-                    if (simpleMatch) {
-                        types.body = simpleMatch[1].trim()
-                    }
-                }
-            }
-
-            // Extract response type - handle nested braces
-            const responseStartMatch = actionBlock.match(
-                /response\s*[?]?\s*:\s*/,
-            )
-            if (responseStartMatch && responseStartMatch.index !== undefined) {
-                const afterResponse = actionBlock.slice(
-                    responseStartMatch.index + responseStartMatch[0].length,
-                )
-                if (afterResponse.startsWith('{')) {
-                    const responseBlock = extractBalancedBraces(
-                        afterResponse,
-                        0,
-                    )
-                    if (responseBlock) {
-                        types.response = `{ ${responseBlock} }`
-                    }
-                } else {
-                    const simpleMatch = afterResponse.match(/^([^;\n}]+)/)
-                    if (simpleMatch) {
-                        types.response = simpleMatch[1].trim()
-                    }
-                }
-            }
-
-            // Extract params type
-            const paramsStartMatch = actionBlock.match(/params\s*[?]?\s*:\s*/)
-            if (paramsStartMatch && paramsStartMatch.index !== undefined) {
-                const afterParams = actionBlock.slice(
-                    paramsStartMatch.index + paramsStartMatch[0].length,
-                )
-                if (afterParams.startsWith('{')) {
-                    const paramsBlock = extractBalancedBraces(afterParams, 0)
-                    if (paramsBlock) {
-                        types.params = `{ ${paramsBlock} }`
-                    }
-                } else {
-                    const simpleMatch = afterParams.match(/^([^;\n}]+)/)
-                    if (simpleMatch) {
-                        types.params = simpleMatch[1].trim()
-                    }
-                }
-            }
-
-            // Extract query type
-            const queryStartMatch = actionBlock.match(/query\s*[?]?\s*:\s*/)
-            if (queryStartMatch && queryStartMatch.index !== undefined) {
-                const afterQuery = actionBlock.slice(
-                    queryStartMatch.index + queryStartMatch[0].length,
-                )
-                if (afterQuery.startsWith('{')) {
-                    const queryBlock = extractBalancedBraces(afterQuery, 0)
-                    if (queryBlock) {
-                        types.query = `{ ${queryBlock} }`
-                    }
-                } else {
-                    const simpleMatch = afterQuery.match(/^([^;\n}]+)/)
-                    if (simpleMatch) {
-                        types.query = simpleMatch[1].trim()
-                    }
-                }
-            }
-
-            if (Object.keys(types).length > 0) {
-                result[actionName] = types
-            }
-        }
-
-        return Object.keys(result).length > 0 ? result : null
-    } catch {
-        return null
-    }
+const EMPTY_CONTROLLER: ParsedControllerSource = {
+    endpoints: null,
+    extraTypes: [],
 }
 
-/**
- * Extract standalone exported types from a controller file (not part of Endpoints interface).
- * e.g., `export type SSEEvent = { type: 'connected' } | { type: 'progress', ... }`
- */
-function parseExtraTypesFromFile(
+// Runs on every schema and hash request, so unchanged files are served from cache
+async function readControllerTypes(
     filePath: string,
     controller: string,
-): ExtraControllerType[] {
+): Promise<ParsedControllerSource> {
+    if (!/\.tsx?$/.test(filePath)) return EMPTY_CONTROLLER
     try {
-        if (!fs.existsSync(filePath)) {
-            return []
+        const { mtimeMs, size } = fs.statSync(filePath)
+        const cached = controllerCache.get(filePath)
+        if (cached && cached.mtimeMs === mtimeMs && cached.size === size) {
+            return cached.parsed
         }
 
-        const content = fs.readFileSync(filePath, 'utf-8')
-        const extraTypes: ExtraControllerType[] = []
-
-        // Pattern 1: export type Name = ...
-        const typePattern = /export\s+type\s+(\w+)\s*=\s*/g
-        let match
-
-        while ((match = typePattern.exec(content)) !== null) {
-            const typeName = match[1]
-            // Skip the Endpoints interface (it's handled separately)
-            if (typeName === 'Endpoints') continue
-
-            const afterEquals = match.index + match[0].length
-            const restOfContent = content.slice(afterEquals)
-
-            // Find end of type definition: next top-level declaration or end of file
-            const endPattern =
-                /\n(?=export\s|const\s|let\s|var\s|function\s|class\s|default\s|import\s)/
-            const endMatch = restOfContent.match(endPattern)
-
-            let typeDefinition: string
-            if (endMatch && endMatch.index !== undefined) {
-                typeDefinition = restOfContent.slice(0, endMatch.index).trim()
-            } else {
-                typeDefinition = restOfContent.trim()
-            }
-
-            extraTypes.push({ controller, typeName, typeDefinition })
-        }
-
-        // Pattern 2: export interface Name { ... } (excluding Endpoints)
-        const interfacePattern = /export\s+interface\s+(\w+)\s*\{/g
-
-        while ((match = interfacePattern.exec(content)) !== null) {
-            const typeName = match[1]
-            if (typeName === 'Endpoints') continue
-
-            const braceStart = match.index + match[0].length - 1
-            const block = extractBalancedBraces(content, braceStart)
-
-            if (block) {
-                extraTypes.push({
-                    controller,
-                    typeName,
-                    typeDefinition: `{ ${block} }`,
-                })
+        const source = fs.readFileSync(filePath, 'utf-8')
+        let parsed = EMPTY_CONTROLLER
+        if (/export\s+(type|interface)\s/.test(source)) {
+            const ts = await loadTypeScript()
+            if (ts) {
+                parsed = parseControllerSource(ts, source, controller, filePath)
             }
         }
-
-        return extraTypes
+        controllerCache.set(filePath, { mtimeMs, size, parsed })
+        return parsed
     } catch {
-        return []
+        return EMPTY_CONTROLLER
     }
 }
 
@@ -370,7 +191,7 @@ export default ({ strapi }: { strapi: any }) => ({
      * Extract extra (standalone) exported types from all API controller files.
      * These are types like `export type SSEEvent = ...` that are not part of the Endpoints interface.
      */
-    extractExtraTypes(strapiDir: string): ExtraControllerType[] {
+    async extractExtraTypes(strapiDir: string): Promise<ExtraControllerType[]> {
         const extraTypes: ExtraControllerType[] = []
         const apiDir = path.join(strapiDir, 'src', 'api')
 
@@ -396,7 +217,10 @@ export default ({ strapi }: { strapi: any }) => ({
             for (const file of controllerFiles) {
                 const filePath = path.join(controllersDir, file)
                 const controllerName = file.replace(/\.ts$/, '')
-                const types = parseExtraTypesFromFile(filePath, controllerName)
+                const { extraTypes: types } = await readControllerTypes(
+                    filePath,
+                    controllerName,
+                )
 
                 for (const t of types) {
                     const key = `${t.controller}:${t.typeName}`
@@ -420,10 +244,10 @@ export default ({ strapi }: { strapi: any }) => ({
     /**
      * Extract routes from filesystem (fallback when strapi.api is empty)
      */
-    extractRoutesFromFiles(strapiDir: string): {
+    async extractRoutesFromFiles(strapiDir: string): Promise<{
         endpoints: ParsedEndpoint[]
         extraTypes: ExtraControllerType[]
-    } {
+    }> {
         const endpoints: ParsedEndpoint[] = []
         const apiDir = path.join(strapiDir, 'src', 'api')
 
@@ -446,19 +270,22 @@ export default ({ strapi }: { strapi: any }) => ({
 
             for (const routeFile of routeFiles) {
                 const filePath = path.join(routesDir, routeFile)
-                const routes = this.parseRouteFile(filePath, apiName)
+                const routes = await this.parseRouteFile(filePath, apiName)
                 endpoints.push(...routes)
             }
         }
 
-        const extraTypes = this.extractExtraTypes(strapiDir)
+        const extraTypes = await this.extractExtraTypes(strapiDir)
         return { endpoints, extraTypes }
     },
 
     /**
      * Parse a route file and extract routes
      */
-    parseRouteFile(filePath: string, _apiName: string): ParsedEndpoint[] {
+    async parseRouteFile(
+        filePath: string,
+        _apiName: string,
+    ): Promise<ParsedEndpoint[]> {
         const endpoints: ParsedEndpoint[] = []
 
         try {
@@ -510,8 +337,12 @@ export default ({ strapi }: { strapi: any }) => ({
                         strapi.log.debug(
                             `[strapi-types] Found controller: ${foundControllerPath}`,
                         )
-                        controllerTypesCache[controller] =
-                            parseEndpointsFromFile(foundControllerPath)
+                        controllerTypesCache[controller] = (
+                            await readControllerTypes(
+                                foundControllerPath,
+                                controller,
+                            )
+                        ).endpoints
                         if (controllerTypesCache[controller]) {
                             strapi.log.debug(
                                 `[strapi-types] Parsed types for ${controller}: ${Object.keys(controllerTypesCache[controller]!).join(', ')}`,
@@ -555,7 +386,7 @@ export default ({ strapi }: { strapi: any }) => ({
     /**
      * Extract all custom API endpoints from Strapi
      */
-    extractEndpoints(): EndpointsResponse {
+    async extractEndpoints(): Promise<EndpointsResponse> {
         const endpoints: ParsedEndpoint[] = []
         const strapiDir = strapi.dirs?.app?.root || process.cwd()
 
@@ -599,7 +430,7 @@ export default ({ strapi }: { strapi: any }) => ({
             )
 
             // Alternative: Read routes from filesystem
-            const fromFiles = this.extractRoutesFromFiles(strapiDir)
+            const fromFiles = await this.extractRoutesFromFiles(strapiDir)
             if (fromFiles.endpoints.length > 0) {
                 strapi.log.debug(
                     `[strapi-types] Found ${fromFiles.endpoints.length} routes from files`,
@@ -621,7 +452,7 @@ export default ({ strapi }: { strapi: any }) => ({
             // Even with no API routes, extract plugin routes
             this.extractPluginRoutes(endpoints, 'users-permissions')
             if (endpoints.length > 0) {
-                const extraTypes = this.extractExtraTypes(strapiDir)
+                const extraTypes = await this.extractExtraTypes(strapiDir)
                 return {
                     endpoints,
                     extraTypes,
@@ -732,15 +563,19 @@ export default ({ strapi }: { strapi: any }) => ({
                 // Try to find and parse types
                 let types: EndpointType | undefined
 
-                if (!controllerTypesCache[controller]) {
+                if (!(controller in controllerTypesCache)) {
                     const controllerFile = findControllerFile(
                         strapiDir,
                         apiName,
                         controller,
                     )
                     if (controllerFile) {
-                        controllerTypesCache[controller] =
-                            parseEndpointsFromFile(controllerFile)
+                        controllerTypesCache[controller] = (
+                            await readControllerTypes(
+                                controllerFile,
+                                controller,
+                            )
+                        ).endpoints
                     } else {
                         controllerTypesCache[controller] = null
                     }
@@ -777,7 +612,7 @@ export default ({ strapi }: { strapi: any }) => ({
         })
 
         // Extract extra types from controller files
-        const extraTypes = this.extractExtraTypes(strapiDir)
+        const extraTypes = await this.extractExtraTypes(strapiDir)
 
         return {
             endpoints,
@@ -846,8 +681,8 @@ export default ({ strapi }: { strapi: any }) => ({
     /**
      * Get endpoints for a specific API
      */
-    getEndpointsForApi(apiName: string): ParsedEndpoint[] {
-        const { endpoints } = this.extractEndpoints()
+    async getEndpointsForApi(apiName: string): Promise<ParsedEndpoint[]> {
+        const { endpoints } = await this.extractEndpoints()
         return endpoints.filter(
             e => e.controller === apiName || e.path.startsWith(`/${apiName}`),
         )

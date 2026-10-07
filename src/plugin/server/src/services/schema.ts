@@ -163,7 +163,7 @@ export default ({ strapi }: { strapi: any }) => ({
     /**
      * Get the full schema with hash and endpoints
      */
-    getSchema(): SchemaResponse {
+    async getSchema(): Promise<SchemaResponse> {
         const schema = this.extractSchema()
 
         // Get endpoints from endpoints service
@@ -174,7 +174,8 @@ export default ({ strapi }: { strapi: any }) => ({
                 .plugin('strapi-typed-client')
                 .service('endpoints')
             if (endpointsService) {
-                const endpointsResult = endpointsService.extractEndpoints()
+                const endpointsResult =
+                    await endpointsService.extractEndpoints()
                 endpoints = endpointsResult.endpoints
                 extraTypes = endpointsResult.extraTypes || []
             }
@@ -209,7 +210,7 @@ export default ({ strapi }: { strapi: any }) => ({
     /**
      * Get only the schema hash (lightweight operation)
      */
-    getSchemaHash(): HashResponse {
+    async getSchemaHash(): Promise<HashResponse> {
         const schema = this.extractSchema()
 
         // Include endpoints and extraTypes in hash computation for consistency with getSchema()
@@ -220,7 +221,8 @@ export default ({ strapi }: { strapi: any }) => ({
                 .plugin('strapi-typed-client')
                 .service('endpoints')
             if (endpointsService) {
-                const endpointsResult = endpointsService.extractEndpoints()
+                const endpointsResult =
+                    await endpointsService.extractEndpoints()
                 endpoints = endpointsResult.endpoints
                 extraTypes = endpointsResult.extraTypes || []
             }

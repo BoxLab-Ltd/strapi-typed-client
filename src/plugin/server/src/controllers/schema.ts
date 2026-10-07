@@ -27,8 +27,8 @@ export interface StrapiInstance {
     }
     plugin: (name: string) => {
         service: (name: string) => {
-            getSchema: () => unknown
-            getSchemaHash: () => unknown
+            getSchema: () => Promise<unknown>
+            getSchemaHash: () => Promise<unknown>
         }
     }
     service: (uid: string) => any
@@ -96,7 +96,7 @@ export default ({ strapi }: { strapi: StrapiInstance }) => ({
             const schemaService = strapi
                 .plugin('strapi-typed-client')
                 .service('schema')
-            const result = schemaService.getSchema()
+            const result = await schemaService.getSchema()
 
             ctx.body = result
         } catch (error) {
@@ -128,7 +128,7 @@ export default ({ strapi }: { strapi: StrapiInstance }) => ({
             const schemaService = strapi
                 .plugin('strapi-typed-client')
                 .service('schema')
-            const result = schemaService.getSchemaHash()
+            const result = await schemaService.getSchemaHash()
 
             ctx.body = result
         } catch (error) {
@@ -172,10 +172,11 @@ export default ({ strapi }: { strapi: StrapiInstance }) => ({
             const schemaService = strapi
                 .plugin('strapi-typed-client')
                 .service('schema')
-            const { hash, generatedAt } = schemaService.getSchemaHash() as {
-                hash: string
-                generatedAt: string
-            }
+            const { hash, generatedAt } =
+                (await schemaService.getSchemaHash()) as {
+                    hash: string
+                    generatedAt: string
+                }
 
             stream.write(`retry: 1000\n`)
             stream.write(`event: connected\n`)

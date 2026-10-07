@@ -209,7 +209,7 @@ generates:
 ```typescript
 export namespace SearchAPI {
     export type SearchResultType = 'article' | 'page' | 'product'
-    export interface SearchHit {
+    export type SearchHit = {
         id: number
         title: string
         type: SearchResultType
@@ -248,14 +248,13 @@ await strapi.imports.upload(formData)
 
 ## Authoring constraints
 
-The plugin scrapes `body` / `response` with a regex + balanced-brace scanner — **not** the TypeScript compiler. Keep declarations in a shape it can read:
+The plugin reads `Endpoints` with the TypeScript compiler, so any type syntax works — multi-line unions, nested objects, generics, comments. What still applies:
 
-- Use an **inline object literal** (`{ ... }`) or a **single simple token** (`void`, a type name) for `body` / `response`.
+- `Endpoints` must be **exported** from the controller file, as an `interface` or a `type` alias of an object literal (intersections of object literals are merged; repeated `interface Endpoints` blocks merge too).
 - Each `Endpoints` key must **equal the handler's action name**.
-- Avoid splitting a type across constructs the scanner can truncate (e.g. a `body` assembled from external generics).
-
-::: tip
-This describes the current regex-based parser. A future release moves to a TypeScript-AST parser, which will widen what resolves and shrink the `unknown` fallback — your `Endpoints` declarations won't need to change.
-:::
+- Only `.ts` controllers are read; `.js` controllers produce untyped methods.
+- `typeof someValue`, `import('...')` types and `this` can't exist in the generated client, so they become `unknown`.
+- Generic extra types (`export type Page<T> = ...`) are skipped — the namespace can't carry type parameters. An interface that `extends` another is emitted as an intersection with its bases.
+- Comments are not carried into the generated types.
 
 For the generate / watch / commit workflow, see the [CLI reference](/guide/cli).
