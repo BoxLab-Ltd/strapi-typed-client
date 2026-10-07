@@ -57,6 +57,26 @@ describe('parseControllerSource', () => {
         })
     })
 
+    it('keeps line breaks inside template literal types', () => {
+        const { endpoints, extraTypes } = parse(
+            'export type Tag = `line1\n  line2 ${string}`\n' +
+                'export interface Endpoints {\n' +
+                '    run: {\n' +
+                '        response: {\n' +
+                '            tag: `a\nb`\n' +
+                '        }\n' +
+                '    }\n' +
+                '}\n',
+        )
+        expect(endpoints?.run?.response).toBe('{ tag: `a\nb`; }')
+        expect(extraTypes[0]?.typeDefinition).toBe('`line1\n  line2 ${string}`')
+    })
+
+    it('reports a file that does not parse', () => {
+        expect(parse('export interface Endpoints {').syntaxError).toBe(true)
+        expect(parse('export interface Endpoints {}').syntaxError).toBe(false)
+    })
+
     it('ignores comments, including ones holding braces and quotes', () => {
         const { endpoints } = parse(`
             export interface Endpoints {
@@ -160,6 +180,6 @@ describe('parseControllerSource', () => {
     it('gives up on a file that does not parse instead of emitting garbage', () => {
         expect(
             parse('export interface Endpoints { a: { response: { x: } }'),
-        ).toEqual({ endpoints: null, extraTypes: [] })
+        ).toEqual({ endpoints: null, extraTypes: [], syntaxError: true })
     })
 })

@@ -830,3 +830,32 @@ describe('Schema Transformer', () => {
         })
     })
 })
+
+describe('privateAttributes', () => {
+    it('reads private scalars sent under their own key as write-only', () => {
+        const result = transformSchema({
+            contentTypes: {
+                'api::account.account': {
+                    uid: 'api::account.account',
+                    kind: 'collectionType',
+                    collectionName: 'accounts',
+                    info: {
+                        singularName: 'account',
+                        pluralName: 'accounts',
+                        displayName: 'Account',
+                    },
+                    attributes: { login: { type: 'string' } },
+                    privateAttributes: {
+                        token: { type: 'string', private: true },
+                    },
+                },
+            },
+            components: {},
+        })
+
+        expect(result.contentTypes[0]!.attributes).toEqual([
+            expect.objectContaining({ name: 'login' }),
+            expect.objectContaining({ name: 'token', writeOnly: true }),
+        ])
+    })
+})

@@ -52,6 +52,12 @@ function attributesOf(strapi: unknown) {
         .attributes
 }
 
+function privateOf(strapi: unknown) {
+    const service = schemaService({ strapi } as { strapi: never })
+    return service.extractSchema().contentTypes['api::article.article']!
+        .privateAttributes
+}
+
 describe('plugin schema service — creator fields', () => {
     it('drops them when populateCreatorFields is off', () => {
         const attributes = attributesOf(strapiStub(false))
@@ -88,7 +94,7 @@ describe('plugin schema service — creator fields', () => {
 })
 
 describe('plugin schema service — private attributes', () => {
-    it('forwards private scalars, still marked private, since Strapi accepts them on write', () => {
+    it('forwards private scalars under their own key, since Strapi accepts them on write', () => {
         const attributes = attributesOf(
             strapiStub(false, {
                 secretNote: { type: 'string', private: true },
@@ -96,8 +102,18 @@ describe('plugin schema service — private attributes', () => {
             }),
         )
 
-        expect(attributes.secretNote).toEqual({ type: 'string', private: true })
-        expect(attributes.password).toEqual({ type: 'password', private: true })
+        const article = privateOf(
+            strapiStub(false, {
+                secretNote: { type: 'string', private: true },
+                password: { type: 'password', private: true },
+            }),
+        )
+
+        expect(attributes).not.toHaveProperty('secretNote')
+        expect(article).toEqual({
+            secretNote: { type: 'string', private: true },
+            password: { type: 'password', private: true },
+        })
     })
 
     it('still drops private relations', () => {

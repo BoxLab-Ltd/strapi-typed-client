@@ -94,7 +94,10 @@ function transformContentType(uid: string, ct: StrapiContentType): ContentType {
     const dynamicZones: DynamicZoneField[] = []
 
     // Process attributes
-    for (const [attrName, attr] of Object.entries(ct.attributes)) {
+    for (const [attrName, attr] of Object.entries({
+        ...ct.attributes,
+        ...ct.privateAttributes,
+    })) {
         const result = processAttribute(attrName, attr)
         if (!result) continue
 
@@ -152,7 +155,10 @@ function transformComponent(uid: string, comp: StrapiComponent): Component {
     const dynamicZones: DynamicZoneField[] = []
 
     // Process attributes
-    for (const [attrName, attr] of Object.entries(comp.attributes)) {
+    for (const [attrName, attr] of Object.entries({
+        ...comp.attributes,
+        ...comp.privateAttributes,
+    })) {
         const result = processAttribute(attrName, attr)
         if (!result) continue
 

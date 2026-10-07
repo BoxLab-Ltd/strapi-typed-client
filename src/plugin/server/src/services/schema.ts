@@ -37,6 +37,19 @@ const NON_SCALAR_TYPES = new Set([
     'dynamiczone',
 ])
 
+// Private scalars are never returned but are writable, so inputs need them. They
+// travel under their own key: a pre-2.3 CLI ignores it instead of exposing them
+// on read types. Private relations stay out (the creator-field gate).
+function privateScalarAttributes(
+    attributes: Record<string, StrapiAttribute>,
+): Record<string, StrapiAttribute> | undefined {
+    const picked = Object.entries(attributes).filter(
+        ([, attr]) =>
+            attr.private && !NON_SCALAR_TYPES.has(attr.type as string),
+    )
+    return picked.length > 0 ? Object.fromEntries(picked) : undefined
+}
+
 /**
  * Filter out system attributes that shouldn't be exposed
  */
@@ -56,9 +69,8 @@ function filterAttributes(
             continue
         }
 
-        // Private scalars are hidden from responses but still writable, so
-        // inputs need them; private relations stay out (creator-field gate).
-        if (attr.private && NON_SCALAR_TYPES.has(attr.type as string)) {
+        // Private attributes are sent separately (privateAttributes)
+        if (attr.private) {
             continue
         }
 
@@ -88,6 +100,13 @@ function filterAttributes(
     return filtered
 }
 
+function withPrivate(attributes: Record<string, StrapiAttribute> | undefined): {
+    privateAttributes?: Record<string, StrapiAttribute>
+} {
+    const picked = privateScalarAttributes(attributes || {})
+    return picked ? { privateAttributes: picked } : {}
+}
+
 /**
  * Extract clean content type schema
  */
@@ -110,6 +129,7 @@ function extractContentType(ct: any): StrapiContentType | null {
             description: ct.info?.description,
         },
         attributes: filterAttributes(ct.attributes || {}),
+        ...withPrivate(ct.attributes),
     }
 }
 
@@ -127,6 +147,7 @@ function extractComponent(component: any): StrapiComponent | null {
             description: component.info?.description,
         },
         attributes: filterAttributes(component.attributes || {}),
+        ...withPrivate(component.attributes),
     }
 }
 

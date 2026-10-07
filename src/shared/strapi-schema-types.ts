@@ -50,6 +50,8 @@ export interface StrapiContentType {
         description?: string
     }
     attributes: Record<string, StrapiAttribute>
+    // Writable but never returned; a separate key so older CLIs ignore them
+    privateAttributes?: Record<string, StrapiAttribute>
 }
 
 /**
@@ -63,6 +65,8 @@ export interface StrapiComponent {
         description?: string
     }
     attributes: Record<string, StrapiAttribute>
+    // Writable but never returned; a separate key so older CLIs ignore them
+    privateAttributes?: Record<string, StrapiAttribute>
 }
 
 /**

@@ -9,6 +9,7 @@ import type {
 export interface ParsedControllerSource {
     endpoints: Record<string, EndpointType> | null
     extraTypes: ExtraControllerType[]
+    syntaxError: boolean
 }
 
 const ENDPOINT_KEYS = ['body', 'response', 'params', 'query'] as const
@@ -19,7 +20,6 @@ export function parseControllerSource(
     controller: string,
     fileName = 'controller.ts',
 ): ParsedControllerSource {
-    const empty: ParsedControllerSource = { endpoints: null, extraTypes: [] }
     const sf = ts.createSourceFile(
         fileName,
         source,
@@ -30,13 +30,14 @@ export function parseControllerSource(
     // A file that does not parse would print as partial garbage
     const diagnostics = (sf as { parseDiagnostics?: unknown[] })
         .parseDiagnostics
-    if (diagnostics && diagnostics.length > 0) return empty
+    if (diagnostics && diagnostics.length > 0) {
+        return { endpoints: null, extraTypes: [], syntaxError: true }
+    }
 
     const printer = ts.createPrinter({ removeComments: true })
     const print = (node: TS.TypeNode): string =>
         printer
             .printNode(ts.EmitHint.Unspecified, toPortable(ts, node), sf)
-            .replace(/\s*\n\s*/g, ' ')
             .trim()
 
     const endpointMembers: TS.TypeElement[] = []
@@ -100,6 +101,7 @@ export function parseControllerSource(
     return {
         endpoints: Object.keys(endpoints).length > 0 ? endpoints : null,
         extraTypes,
+        syntaxError: false,
     }
 }
 
@@ -140,18 +142,31 @@ function memberName(ts: typeof TS, name: TS.PropertyName): string | undefined {
 function toPortable(ts: typeof TS, node: TS.TypeNode): TS.TypeNode {
     const result = ts.transform(node, [
         context => {
-            const visit = (child: TS.Node): TS.Node =>
-                ts.isTypeQueryNode(child) ||
-                ts.isImportTypeNode(child) ||
-                ts.isThisTypeNode(child)
-                    ? ts.factory.createKeywordTypeNode(
-                          ts.SyntaxKind.UnknownKeyword,
-                      )
-                    : ts.visitEachChild(child, visit, context)
+            const visit = (child: TS.Node): TS.Node => {
+                if (
+                    ts.isTypeQueryNode(child) ||
+                    ts.isImportTypeNode(child) ||
+                    ts.isThisTypeNode(child)
+                ) {
+                    return ts.factory.createKeywordTypeNode(
+                        ts.SyntaxKind.UnknownKeyword,
+                    )
+                }
+                const visited = ts.visitEachChild(child, visit, context)
+                // One line on the wire, without touching text inside literals
+                if (
+                    ts.isTypeLiteralNode(visited) ||
+                    ts.isMappedTypeNode(visited) ||
+                    ts.isTupleTypeNode(visited)
+                ) {
+                    ts.setEmitFlags(visited, ts.EmitFlags.SingleLine)
+                }
+                return visited
+            }
             return root => visit(root) as TS.TypeNode
         },
     ])
+    // Not disposed: that would drop the emit flags before printing
     const [portable] = result.transformed
-    result.dispose()
     return portable ?? node
 }
