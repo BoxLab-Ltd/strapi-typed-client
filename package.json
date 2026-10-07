@@ -128,13 +128,15 @@
         "typescript-eslint": "^8.55.0",
         "vitepress": "^1.6.4",
         "vitepress-plugin-llms": "^1.11.0",
-        "vitest": "^5.0.0"
+        "vitest": "^5.0.0",
+        "zod": "^4.0.0"
     },
     "peerDependencies": {
         "@strapi/design-system": "^2.0.0",
         "@strapi/strapi": "^5.0.0",
         "react": "^18.0.0 || ^19.0.0",
-        "react-dom": "^18.0.0 || ^19.0.0"
+        "react-dom": "^18.0.0 || ^19.0.0",
+        "zod": "^4.0.0"
     },
     "peerDependenciesMeta": {
         "@strapi/strapi": {
@@ -147,6 +149,9 @@
             "optional": true
         },
         "react-dom": {
+            "optional": true
+        },
+        "zod": {
             "optional": true
         }
     },

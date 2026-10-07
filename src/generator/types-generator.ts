@@ -13,6 +13,12 @@ import {
 import { TypeTransformer } from '../transformer/index.js'
 import { buildConstraintDocs } from './constraint-docs.js'
 import {
+    dzComponentUids as collectDzComponentUids,
+    inputFields,
+    type InputField,
+    type InputMode,
+} from './input-fields.js'
+import {
     generateFilterUtilityTypes,
     generateEntityFilters,
     generateComponentFilters,
@@ -60,7 +66,7 @@ export class TypesGenerator {
         // any dynamic zone — Strapi rejects __component on regular component
         // attributes, so the discriminator must live on the place of use, not
         // on the component itself.
-        const dzComponentUids = this.collectDzComponentUids(schema)
+        const dzComponentUids = collectDzComponentUids(schema)
         for (const component of schema.components) {
             if (dzComponentUids.has(component.uid)) {
                 this.addComponentDzAlias(sf, component)
@@ -487,21 +493,6 @@ type _ApplyFields<TFull, TBase, TEntry> = TEntry extends true ? TFull : TEntry e
         }
     }
 
-    private collectDzComponentUids(schema: ParsedSchema): Set<string> {
-        const uids = new Set<string>()
-        for (const ct of schema.contentTypes) {
-            for (const dz of ct.dynamicZones) {
-                for (const uid of dz.components) uids.add(uid)
-            }
-        }
-        for (const comp of schema.components) {
-            for (const dz of comp.dynamicZones) {
-                for (const uid of dz.components) uids.add(uid)
-            }
-        }
-        return uids
-    }
-
     private addComponentInputInterfaces(
         sf: SourceFile,
         component: Component,
@@ -511,91 +502,56 @@ type _ApplyFields<TFull, TBase, TEntry> = TEntry extends true ? TFull : TEntry e
                 name: `${component.cleanName}${mode}Input`,
                 docs: [`${mode} input for ${component.cleanName}`],
                 isExported: true,
-                properties: this.buildInputProperties(component, mode, true),
+                properties: this.buildInputProperties(component, mode, false),
             })
         }
     }
 
-    /**
-     * Shared property list for `*CreateInput` / `*UpdateInput`. In create mode a
-     * required *scalar* drops its `?` (and `| null`); update mode is fully
-     * partial (every key optional). Required-ness is enforced for scalars only —
-     * Strapi does not validate `required` on relations/media/components at the
-     * REST layer, so forcing those keys would reject payloads it accepts.
-     * Components / dynamic zones still split so their nested required scalars
-     * are enforced in the Create variant.
-     */
     private buildInputProperties(
         type: ContentType | Component,
-        mode: 'Create' | 'Update',
-        includeId: boolean,
+        mode: InputMode,
+        isContentType: boolean,
     ): OptionalKind<PropertySignatureStructure>[] {
-        const props: OptionalKind<PropertySignatureStructure>[] = []
-        if (includeId) {
-            props.push({ name: 'id', type: 'number', hasQuestionToken: true })
-        }
-        for (const attr of type.attributes) {
-            // Strapi applies a schema default before checking `required`
-            const hasDefault = attr.defaultValue !== undefined
-            props.push({
-                name: attr.name,
-                type: this.transformer.toTypeScript(
-                    attr.type,
-                    attr.required,
+        return inputFields(type, mode, isContentType).map(field => ({
+            name: field.name,
+            type: this.inputFieldType(field, mode),
+            hasQuestionToken: field.optional,
+            ...(field.kind === 'attribute' ? this.docsFor(field.attr) : {}),
+        }))
+    }
+
+    private inputFieldType(field: InputField, mode: InputMode): string {
+        switch (field.kind) {
+            case 'id':
+                return 'number'
+            case 'attribute':
+                return this.transformer.toTypeScript(
+                    field.attr.type,
+                    !field.nullable,
                     'input',
-                ),
-                hasQuestionToken:
-                    mode === 'Update' || !attr.required || hasDefault,
-                ...this.docsFor(attr),
-            })
+                )
+            case 'media':
+                return field.multiple ? 'MultiMediaInput' : 'MediaInput'
+            case 'relation':
+                return 'RelationInput'
+            case 'component': {
+                const inner = `${field.componentType}${mode}Input`
+                if (field.repeatable) return `${inner}[]`
+                return field.nullable ? `${inner} | null` : inner
+            }
+            case 'dynamiczone': {
+                const members = field.componentTypes.map(
+                    ct => `${ct}Dz${mode}Input`,
+                )
+                return members.length === 1
+                    ? `${members[0]}[]`
+                    : `(${members.join(' | ')})[]`
+            }
+            case 'locale':
+                return 'string'
+            case 'publishedAt':
+                return 'string | null'
         }
-        for (const mediaField of type.media) {
-            props.push({
-                name: mediaField.name,
-                type: mediaField.multiple ? 'MultiMediaInput' : 'MediaInput',
-                hasQuestionToken: true,
-            })
-        }
-        // Strapi-managed relations (the creator fields) are readable but never
-        // writable — accepting them in an input type would type-check a payload
-        // the backend silently drops.
-        for (const rel of type.relations) {
-            if (rel.readOnly) continue
-            props.push({
-                name: rel.name,
-                type: 'RelationInput',
-                hasQuestionToken: true,
-            })
-        }
-        // Strapi rejects null for repeatable components and dynamic zones, and
-        // enforces `required` on a single component (unlike relations/media).
-        for (const compField of type.components) {
-            const inner = `${compField.componentType}${mode}Input`
-            const required = compField.required && !compField.repeatable
-            props.push({
-                name: compField.name,
-                type: compField.repeatable
-                    ? `${inner}[]`
-                    : required
-                      ? inner
-                      : `${inner} | null`,
-                hasQuestionToken: mode === 'Update' || !required,
-            })
-        }
-        for (const dzField of type.dynamicZones) {
-            const members = dzField.componentTypes.map(
-                ct => `${ct}Dz${mode}Input`,
-            )
-            props.push({
-                name: dzField.name,
-                type:
-                    members.length === 1
-                        ? `${members[0]}[]`
-                        : `(${members.join(' | ')})[]`,
-                hasQuestionToken: true,
-            })
-        }
-        return props
     }
 
     private addContentTypeInterface(
@@ -640,15 +596,7 @@ type _ApplyFields<TFull, TBase, TEntry> = TEntry extends true ? TFull : TEntry e
                 name: `${contentType.cleanName}${mode}Input`,
                 docs: [`${mode} input for ${contentType.cleanName}`],
                 isExported: true,
-                properties: [
-                    ...this.buildInputProperties(contentType, mode, false),
-                    { name: 'locale', type: 'string', hasQuestionToken: true },
-                    {
-                        name: 'publishedAt',
-                        type: 'string | null',
-                        hasQuestionToken: true,
-                    },
-                ],
+                properties: this.buildInputProperties(contentType, mode, true),
             })
         }
     }

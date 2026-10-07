@@ -6,6 +6,8 @@ import { ParsedSchema } from '../schema-types.js'
 import { TypesGenerator } from './types-generator.js'
 import { ClientGenerator } from './client-generator.js'
 import { IndexGenerator } from './index-generator.js'
+import { ValidationGenerator } from './validation-generator.js'
+import { resolveZod } from './zod-resolution.js'
 import type {
     ParsedEndpoint,
     ExtraControllerType,
@@ -27,6 +29,7 @@ export interface GenerateOptions {
     format?: 'js' | 'ts'
     typecheck?: boolean
     authMode?: AuthMode
+    validation?: 'zod' | 'none'
 }
 
 export class Generator {
@@ -52,8 +55,16 @@ export class Generator {
             format = 'js',
             typecheck = true,
             authMode = 'legacy',
+            validation = 'none',
         }: GenerateOptions = {},
     ): Promise<void> {
+        // Fail before any work: a missing zod must not leave a half-written tree
+        const zodDir =
+            validation === 'zod' ? resolveZod(this.outputDir) : undefined
+        const moduleOptions: ts.CompilerOptions = zodDir
+            ? { paths: { zod: [zodDir] } }
+            : {}
+
         // Generate all source contents
         const typesContent = this.typesGenerator.generate(schema)
         const clientContent = this.clientGenerator.generate(
@@ -72,6 +83,11 @@ export class Generator {
             'client.ts': await this.formatContent(clientContent),
             'index.ts': await this.formatContent(indexContent),
         }
+        if (validation === 'zod') {
+            files['validation.ts'] = await this.formatContent(
+                new ValidationGenerator().generate(schema),
+            )
+        }
 
         if (format === 'ts') {
             // Write raw TypeScript for consumers that compile sources
@@ -87,7 +103,7 @@ export class Generator {
             )
             // Type-check the exact bytes we're about to write, BEFORE touching
             // the consumer's tree — a guard throw must leave it untouched.
-            this.verifyGeneratedTypes(strippedFiles, typecheck)
+            this.verifyGeneratedTypes(strippedFiles, typecheck, moduleOptions)
             this.ensureOutputDir()
             for (const [fileName, data] of Object.entries(strippedFiles)) {
                 fs.writeFileSync(
@@ -100,7 +116,7 @@ export class Generator {
         }
 
         // Compile all files together so cross-file imports resolve correctly
-        await this.compileFiles(files, typecheck)
+        await this.compileFiles(files, typecheck, moduleOptions)
     }
 
     private ensureOutputDir(): void {
@@ -128,8 +144,10 @@ export class Generator {
     private async compileFiles(
         files: Record<string, string>,
         typecheck: boolean,
+        moduleOptions: ts.CompilerOptions,
     ): Promise<void> {
         const compilerOptions: ts.CompilerOptions = {
+            ...moduleOptions,
             target: ts.ScriptTarget.ES2022,
             module: ts.ModuleKind.ES2022,
             declaration: true,
@@ -181,11 +199,20 @@ export class Generator {
         // type-check. Verify it the way a consumer's tsc would (on disk, where
         // bundler resolution maps the `.js` import specifiers to the sibling
         // `.ts`) and fail loudly rather than emit broken types into their tree.
-        this.verifyGeneratedTypes(files, typecheck)
+        this.verifyGeneratedTypes(files, typecheck, moduleOptions)
 
         // Compile all files together
         const program = ts.createProgram(fileNames, compilerOptions, host)
-        program.emit()
+        const emitted = program.emit()
+        // An unresolvable import silently degrades declarations to `any`
+        if (emitted.diagnostics.length > 0) {
+            throw new Error(
+                `Failed to emit the generated client:\n${ts.formatDiagnostics(
+                    emitted.diagnostics,
+                    host,
+                )}`,
+            )
+        }
 
         // Write output files
         this.ensureOutputDir()
@@ -204,8 +231,9 @@ export class Generator {
     private verifyGeneratedTypes(
         files: Record<string, string>,
         typecheck: boolean,
+        moduleOptions: ts.CompilerOptions,
     ): void {
-        const message = this.collectTypeErrors(files)
+        const message = this.collectTypeErrors(files, moduleOptions)
         if (!message) return
         if (typecheck) throw new Error(message)
         console.warn(`${message}\n(--no-typecheck set: writing anyway.)`)
@@ -220,7 +248,10 @@ export class Generator {
      * stricter than a typical consumer tsconfig — the strict presets ship the
      * flag, and the emitted client must stay clean under them.
      */
-    private collectTypeErrors(files: Record<string, string>): string | null {
+    private collectTypeErrors(
+        files: Record<string, string>,
+        moduleOptions: ts.CompilerOptions,
+    ): string | null {
         const checkDir = fs.mkdtempSync(
             path.join(os.tmpdir(), 'strapi-types-check-'),
         )
@@ -232,6 +263,7 @@ export class Generator {
                 path.join(checkDir, n),
             )
             const program = ts.createProgram(rootNames, {
+                ...moduleOptions,
                 target: ts.ScriptTarget.ES2022,
                 module: ts.ModuleKind.ES2022,
                 moduleResolution: ts.ModuleResolutionKind.Bundler,
