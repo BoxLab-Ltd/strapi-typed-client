@@ -444,6 +444,40 @@ describe('generated Zod validators', { timeout: GENERATION_TIMEOUT }, () => {
         }
     })
 
+    // an unused type import fails noUnusedLocals in the consumer's project (#100)
+    it('imports BlocksContent only when a blocks field uses it', async () => {
+        const plainDir = repoTmpDir('validation-plain-')
+        try {
+            await new Generator(plainDir).generate(mockSchema, {
+                format: 'ts',
+                validation: 'zod',
+            })
+            const file = path.join(plainDir, 'validation.ts')
+            expect(fs.readFileSync(file, 'utf-8')).not.toContain(
+                'BlocksContent',
+            )
+            const program = ts.createProgram([file], {
+                target: ts.ScriptTarget.ES2022,
+                module: ts.ModuleKind.ES2022,
+                moduleResolution: ts.ModuleResolutionKind.Bundler,
+                strict: true,
+                noUnusedLocals: true,
+                noUnusedParameters: true,
+                noEmit: true,
+                skipLibCheck: true,
+            })
+            expect(
+                ts
+                    .getPreEmitDiagnostics(program)
+                    .map(d =>
+                        ts.flattenDiagnosticMessageText(d.messageText, ' '),
+                    ),
+            ).toEqual([])
+        } finally {
+            fs.rmSync(plainDir, { recursive: true, force: true })
+        }
+    })
+
     it('handles an empty dynamic zone and a null default', async () => {
         const edgeDir = repoTmpDir('validation-edge-')
         try {

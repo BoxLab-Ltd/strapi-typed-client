@@ -22,7 +22,7 @@ const UID_PATTERN = String.raw`^[A-Za-z0-9-_.~]*$`
 
 /** Renders the pieces of a validator file; one implementation per validation library. */
 export interface ValidatorEmitter {
-    header(): string
+    header(usesBlocks: boolean): string
     shared(): string
     attribute(attr: Attribute): string
     field(field: InputField, mode: InputMode): string
@@ -34,13 +34,16 @@ const regex = (source: string): string =>
     `new RegExp(${JSON.stringify(source)})`
 
 export class ZodEmitter implements ValidatorEmitter {
-    header(): string {
+    header(usesBlocks: boolean): string {
+        // an unused import fails noUnusedLocals in the consumer's project (#100)
+        const blocksImport = usesBlocks
+            ? "import type { BlocksContent } from './types.js'\n"
+            : ''
         return `${VALIDATION_FILE_MARKER}
 // Do not edit manually
 /* eslint-disable */
 import { z } from 'zod'
-import type { BlocksContent } from './types.js'
-`
+${blocksImport}`
     }
 
     shared(): string {
@@ -203,7 +206,10 @@ export class ValidationGenerator {
 
     generate(schema: ParsedSchema): string {
         assertUniqueInputNames(schema)
-        const out = [this.emitter.header(), this.emitter.shared()]
+        const usesBlocks = [...schema.contentTypes, ...schema.components].some(
+            type => type.attributes.some(attr => attr.type.kind === 'blocks'),
+        )
+        const out = [this.emitter.header(usesBlocks), this.emitter.shared()]
         const dzUids = dzComponentUids(schema)
 
         for (const component of componentsInDependencyOrder(schema)) {

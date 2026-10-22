@@ -62,6 +62,22 @@ function appendEntry(
 
 const USERS_PERMISSIONS_USER = 'PluginUsersPermissionsUser'
 
+// exactOptionalPropertyTypes rejects an explicit undefined on `prop?: T`, which both consumers and the client itself assign (#100)
+function allowUndefinedOnOptionalProperties(sf: SourceFile): void {
+    for (const iface of sf.getInterfaces()) {
+        for (const prop of iface.getProperties()) {
+            const type = prop.getTypeNode()?.getText()
+            if (!prop.hasQuestionToken() || !type) continue
+            if (/\bundefined\b/.test(type)) continue
+            prop.setType(
+                type.includes('=>')
+                    ? `(${type}) | undefined`
+                    : `${type} | undefined`,
+            )
+        }
+    }
+}
+
 // The plugin can be disabled, and then neither its content types nor its auth routes exist (#99)
 function hasUsersPermissions(schema: ParsedSchema): boolean {
     return schema.contentTypes.some(ct => ct.name === USERS_PERMISSIONS_USER)
@@ -192,6 +208,8 @@ export class ClientGenerator {
             this.generateStrapiClient(schema, parsedRoutes, activePlugins),
         )
 
+        allowUndefinedOnOptionalProperties(sf)
+
         return sf.getFullText()
     }
 
@@ -215,8 +233,8 @@ export class ClientGenerator {
                 imports.push(`${ct.cleanName}PopulateParam`)
             }
 
-            // Add Create/Update input types for create() / update()
-            imports.push(`${ct.cleanName}CreateInput`)
+            // Add Create/Update input types for create() / update(); single types have no create()
+            if (ct.kind !== 'single') imports.push(`${ct.cleanName}CreateInput`)
             imports.push(`${ct.cleanName}UpdateInput`)
 
             // Add Filter type for type-safe filtering
@@ -259,18 +277,10 @@ export class ClientGenerator {
             filterImports.push('UserFilters')
         }
 
-        // Add filter utility types
-        filterImports.push(
-            'StringFilterOperators',
-            'NumberFilterOperators',
-            'BooleanFilterOperators',
-            'DateFilterOperators',
-            'IdFilterOperators',
-            'LogicalOperators',
-        )
-
-        return `import type { ${imports.join(', ')} } from './types.js'
-import type { ${filterImports.join(', ')} } from './types.js'`
+        const filterImport = filterImports.length
+            ? `\nimport type { ${filterImports.join(', ')} } from './types.js'`
+            : ''
+        return `import type { ${imports.join(', ')} } from './types.js'${filterImport}`
     }
 
     private addUtilityTypes(sf: SourceFile, schema: ParsedSchema): void {
@@ -765,14 +775,6 @@ export function isStrapiErrorOf<N extends keyof StrapiErrorDetailsMap>(
                     type: 'string',
                     docs: ['The URL that was being requested'],
                 },
-                {
-                    name: 'cause',
-                    type: 'Error',
-                    hasQuestionToken: true,
-                    docs: [
-                        'The original error that caused the connection failure',
-                    ],
-                },
             ],
             ctors: [
                 {
@@ -790,6 +792,21 @@ export function isStrapiErrorOf<N extends keyof StrapiErrorDetailsMap>(
                         'this.name = "StrapiConnectionError"',
                         'this.url = url',
                         'this.cause = cause',
+                    ],
+                },
+            ],
+        })
+        // Error.cause exists only with lib ES2022, so a class member would need `override` there and reject it elsewhere (#100)
+        sf.addInterface({
+            name: 'StrapiConnectionError',
+            isExported: true,
+            properties: [
+                {
+                    name: 'cause',
+                    type: 'Error',
+                    hasQuestionToken: true,
+                    docs: [
+                        'The original error that caused the connection failure',
                     ],
                 },
             ],
@@ -839,6 +856,9 @@ function authHeaderValues(headers: Record<string, string>): string[] {
     .map(k => headers[k])
     .filter((value): value is string => value !== undefined)
 }
+
+// RequestInit that also takes an explicit undefined, which exactOptionalPropertyTypes otherwise rejects
+type RequestOptions = { [K in keyof RequestInit]?: RequestInit[K] | undefined } & { next?: unknown }
 
 // Base API class with shared logic
 class BaseAPI {
@@ -917,7 +937,7 @@ class BaseAPI {
       // token travels in the httpOnly cookie (credentials) or, for
       // non-httpOnly setups, in the body.
       let url = \`\${this.config.baseURL}/api/auth/refresh\`
-      const init: RequestInit = {
+      const init: RequestOptions = {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         ...(session.refreshToken && { body: JSON.stringify({ refreshToken: session.refreshToken }) }),
@@ -942,7 +962,7 @@ class BaseAPI {
         if (eff.signal) init.signal = eff.signal
       }
 
-      const response = await fetchFn(url, init)
+      const response = await fetchFn(url, init as RequestInit)
       if (session.epoch !== epoch) return !!session.accessToken
       if (!response.ok) {
         // 4xx = the session is gone for good (401 dead, 403 rejected,
@@ -995,7 +1015,7 @@ class BaseAPI {
 
   protected async request<R>(
     url: string,
-    options: RequestInit = {},
+    options: RequestOptions = {},
     nextOptions?: NextOptions,
     errorPrefix = 'Strapi API',
     _isRetry = false
@@ -1044,7 +1064,7 @@ class BaseAPI {
       }
     }
 
-    const fetchOptions: RequestInit & { next?: unknown } = {
+    const fetchOptions: RequestOptions = {
       ...options,
       headers,
       ...(this.config.credentials && { credentials: this.config.credentials }),
@@ -1112,7 +1132,7 @@ class BaseAPI {
 
     let response: Response
     try {
-      response = await fetchFn(url, fetchOptions)
+      response = await fetchFn(url, fetchOptions as RequestInit)
     } catch (error: any) {
       if (timeoutId) clearTimeout(timeoutId)
 
@@ -1448,7 +1468,6 @@ class CollectionAPI<
         return `// Single Type API wrapper with type-safe populate support
 class SingleTypeAPI<
   TBase,
-  TCreateInput = Partial<TBase>,
   TUpdateInput = Partial<TBase>,
   TFilters = Record<string, any>,
   TPopulateKeys extends Record<string, any> = Record<string, any>
@@ -1518,11 +1537,11 @@ class UsersPermissionsUserAPI<
   TFilters = Record<string, any>,
   TPopulateKeys extends Record<string, any> = Record<string, any>
 > extends CollectionAPI<TBase, TCreateInput, TUpdateInput, TFilters, TPopulateKeys> {
-  protected wrapBody(data: any): any {
+  protected override wrapBody(data: any): any {
     return data
   }
 
-  protected unwrap(response: any): any {
+  protected override unwrap(response: any): any {
     return response
   }
 }`
@@ -1607,10 +1626,15 @@ ${customMethods}
             contentType.components.length > 0 ||
             contentType.dynamicZones.length > 0
 
+        const name = contentType.cleanName
+        const inputs =
+            contentType.kind === 'single'
+                ? `${name}UpdateInput`
+                : `${name}CreateInput, ${name}UpdateInput`
         if (hasPopulatableFields) {
-            return `<${contentType.cleanName}, ${contentType.cleanName}CreateInput, ${contentType.cleanName}UpdateInput, ${contentType.cleanName}Filters, ${contentType.cleanName}PopulateParam>`
+            return `<${name}, ${inputs}, ${name}Filters, ${name}PopulateParam>`
         }
-        return `<${contentType.cleanName}, ${contentType.cleanName}CreateInput, ${contentType.cleanName}UpdateInput, ${contentType.cleanName}Filters>`
+        return `<${name}, ${inputs}, ${name}Filters>`
     }
 
     /**

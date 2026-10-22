@@ -269,13 +269,13 @@ describe('ClientGenerator', () => {
         })
         it('should add onRequest/onResponse/onError to StrapiClientConfig', () => {
             expect(output).toContain(
-                'onRequest?: (req: RequestConfig) => Partial<RequestConfig> | void | Promise<Partial<RequestConfig> | void>',
+                'onRequest?: ((req: RequestConfig) => Partial<RequestConfig> | void | Promise<Partial<RequestConfig> | void>) | undefined',
             )
             expect(output).toContain(
-                'onResponse?: (res: Response) => void | Promise<void>',
+                'onResponse?: ((res: Response) => void | Promise<void>) | undefined',
             )
             expect(output).toContain(
-                'onError?: (err: StrapiError | StrapiConnectionError) => void | Promise<void>',
+                'onError?: ((err: StrapiError | StrapiConnectionError) => void | Promise<void>) | undefined',
             )
         })
         it('should weave onRequest before fetch, merging the returned config over the assembled one', () => {
@@ -498,8 +498,9 @@ describe('ClientGenerator', () => {
             expect(output).not.toContain('private endpoint: string,')
         })
         it('fetchOptions type allows the Next.js `next` property', () => {
+            expect(output).toContain('const fetchOptions: RequestOptions')
             expect(output).toContain(
-                'const fetchOptions: RequestInit & { next?: unknown }',
+                'type RequestOptions = { [K in keyof RequestInit]?: RequestInit[K] | undefined } & { next?: unknown }',
             )
         })
         it('stringifyQuery is called with a Record-compatible cast', () => {
@@ -556,14 +557,14 @@ describe('ClientGenerator', () => {
     })
 
     describe('SingleTypeAPI', () => {
-        it('should generate SingleTypeAPI class with 5 generic parameters', () => {
+        it('should generate SingleTypeAPI class without a create input', () => {
             expect(output).toContain('class SingleTypeAPI<')
             const section = output.slice(
                 output.indexOf('class SingleTypeAPI<'),
                 output.indexOf('class SingleTypeAPI<') + 500,
             )
             expect(section).toContain('TBase,')
-            expect(section).toContain('TCreateInput = Partial<TBase>,')
+            expect(section).not.toContain('TCreateInput')
             expect(section).toContain('TUpdateInput = Partial<TBase>,')
             expect(section).toContain('TFilters = Record<string, any>,')
             expect(section).toContain(
@@ -634,7 +635,7 @@ describe('ClientGenerator', () => {
                 'users: UsersPermissionsUserAPI<User, UserCreateInput, UserUpdateInput, UserFilters, UserPopulateParam>',
             )
             expect(output).toContain(
-                'homepage: SingleTypeAPI<Homepage, HomepageCreateInput, HomepageUpdateInput, HomepageFilters, HomepagePopulateParam>',
+                'homepage: SingleTypeAPI<Homepage, HomepageUpdateInput, HomepageFilters, HomepagePopulateParam>',
             )
         })
         it('should include type parameters for types without populatable fields (4 params)', () => {
@@ -992,14 +993,18 @@ describe('ClientGenerator', () => {
         })
 
         it('overrides wrapBody to send a flat body (no { data } envelope)', () => {
-            expect(upSection).toContain('protected wrapBody(data: any): any')
+            expect(upSection).toContain(
+                'protected override wrapBody(data: any): any',
+            )
             expect(upSection).toMatch(
                 /wrapBody\(data: any\): any \{\s*return data\s*\}/,
             )
         })
 
         it('overrides unwrap to return the flat response (no .data)', () => {
-            expect(upSection).toContain('protected unwrap(response: any): any')
+            expect(upSection).toContain(
+                'protected override unwrap(response: any): any',
+            )
             expect(upSection).toMatch(
                 /unwrap\(response: any\): any \{\s*return response\s*\}/,
             )

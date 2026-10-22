@@ -332,6 +332,14 @@ describe('generated client type-checks clean without @ts-nocheck', () => {
             moduleResolution: ts.ModuleResolutionKind.Bundler,
             strict: true,
             noUncheckedIndexedAccess: true,
+            // the strictest flags a consumer can turn on beyond `strict` (#100)
+            noImplicitOverride: true,
+            exactOptionalPropertyTypes: true,
+            noUnusedLocals: true,
+            noUnusedParameters: true,
+            noImplicitReturns: true,
+            noFallthroughCasesInSwitch: true,
+            noPropertyAccessFromIndexSignature: true,
             skipLibCheck: true,
             noEmit: true,
         })
