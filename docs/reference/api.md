@@ -354,7 +354,7 @@ Single types do not have `findOne`, `create`, or `delete` methods. Use `find` to
 
 ## Authentication API
 
-The authentication API is available at `strapi.auth` and provides methods for the Strapi Users & Permissions plugin.
+The authentication API is available at `strapi.auth` and provides methods for the Strapi Users & Permissions plugin. When the plugin is disabled, the generated client has no `auth` namespace and no `User` types.
 
 ::: tip
 The exact methods available on `strapi.auth` depend on your Strapi project's auth and user controller routes. Common methods like `login`, `register`, `me`, and `forgotPassword` are generated automatically when the corresponding routes exist.

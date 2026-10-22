@@ -60,6 +60,13 @@ function appendEntry(
     pairs.push(\`\${prefix}=\${encodeURIComponent(String(value))}\`)
 }`
 
+const USERS_PERMISSIONS_USER = 'PluginUsersPermissionsUser'
+
+// The plugin can be disabled, and then neither its content types nor its auth routes exist (#99)
+function hasUsersPermissions(schema: ParsedSchema): boolean {
+    return schema.contentTypes.some(ct => ct.name === USERS_PERMISSIONS_USER)
+}
+
 export class ClientGenerator {
     private authApiGenerator: AuthApiGenerator
     private customApiGenerator: CustomApiGenerator
@@ -135,8 +142,11 @@ export class ClientGenerator {
         // Utility types
         this.addUtilityTypes(sf, schema)
 
-        // Auth types
-        sf.addStatements(this.authApiGenerator.generateAuthTypes(authMode))
+        const usersPermissions = hasUsersPermissions(schema)
+
+        if (usersPermissions) {
+            sf.addStatements(this.authApiGenerator.generateAuthTypes(authMode))
+        }
 
         // CollectionAPI class (static block)
         sf.addStatements(this.generateCollectionAPI())
@@ -144,8 +154,10 @@ export class ClientGenerator {
         // SingleTypeAPI class (static block)
         sf.addStatements(this.generateSingleTypeAPI())
 
-        // UsersPermissionsUserAPI class (flat envelope for /api/users)
-        sf.addStatements(this.generateUsersPermissionsUserAPI())
+        if (usersPermissions) {
+            // UsersPermissionsUserAPI class (flat envelope for /api/users)
+            sf.addStatements(this.generateUsersPermissionsUserAPI())
+        }
 
         // Custom API classes (for collections with custom routes)
         if (parsedRoutes) {
@@ -155,15 +167,17 @@ export class ClientGenerator {
         }
 
         // AuthAPI class (with dynamic methods if auth/user routes found)
-        const authRoutes = parsedRoutes?.byController.get('auth') || []
-        const userRoutes = parsedRoutes?.byController.get('user') || []
-        sf.addStatements(
-            this.authApiGenerator.generateAuthApiClass(
-                authRoutes,
-                userRoutes,
-                authMode,
-            ),
-        )
+        if (usersPermissions) {
+            const authRoutes = parsedRoutes?.byController.get('auth') || []
+            const userRoutes = parsedRoutes?.byController.get('user') || []
+            sf.addStatements(
+                this.authApiGenerator.generateAuthApiClass(
+                    authRoutes,
+                    userRoutes,
+                    authMode,
+                ),
+            )
+        }
 
         // Plugin API classes (registry-driven: upload, etc.) — filter out
         // entries colliding with a user-defined standalone controller so
@@ -215,13 +229,16 @@ export class ClientGenerator {
         // Plugin API response types that are not derived from the schema
         imports.push('I18nLocale')
 
+        // The User* imports below feed AuthAPI, which exists only with users-permissions
+        const usersPermissions = hasUsersPermissions(schema)
+
         // Ensure User is imported for Auth types (if not already)
-        if (!imports.includes('User')) {
+        if (usersPermissions && !imports.includes('User')) {
             imports.push('User')
         }
 
         // Ensure UserPopulateParam is imported (for AuthAPI me/updateMe overloads)
-        if (!imports.includes('UserPopulateParam')) {
+        if (usersPermissions && !imports.includes('UserPopulateParam')) {
             const userCt = schema.contentTypes.find(
                 ct => ct.cleanName === 'User',
             )
@@ -238,7 +255,7 @@ export class ClientGenerator {
         }
 
         // Ensure UserFilters is imported (for AuthAPI me/updateMe overloads)
-        if (!filterImports.includes('UserFilters')) {
+        if (usersPermissions && !filterImports.includes('UserFilters')) {
             filterImports.push('UserFilters')
         }
 
@@ -1605,7 +1622,7 @@ ${customMethods}
         contentType: ContentType,
         hasCustomRoutes: boolean,
     ): string {
-        if (contentType.name === 'PluginUsersPermissionsUser') {
+        if (contentType.name === USERS_PERMISSIONS_USER) {
             return 'UsersPermissionsUserAPI'
         }
         if (hasCustomRoutes) {
@@ -1743,24 +1760,32 @@ ${customMethods}
             ? `\n    // Initialize plugin APIs\n${pluginInits}\n`
             : ''
 
-        return `// Main Strapi client
-export class StrapiClient {
-  private config: StrapiClientConfig
-
+        const usersPermissions = hasUsersPermissions(schema)
+        const authDeclarationBlock = usersPermissions
+            ? `
   // Auth API for users-permissions plugin
   auth: AuthAPI
   /** @deprecated Use \`auth\` instead. Will be removed in a future major. */
   get authentication(): AuthAPI {
     return this.auth
-  }
+  }`
+            : ''
+        const authInitBlock = usersPermissions
+            ? `
+    // Initialize Auth API
+    this.auth = new AuthAPI(this.config)`
+            : ''
+
+        return `// Main Strapi client
+export class StrapiClient {
+  private config: StrapiClientConfig
+${authDeclarationBlock}
 ${pluginDeclarationsBlock}
 ${propertyDeclarations}
 ${standaloneDeclarations}
   constructor(config: StrapiClientConfig) {
     this.config = config
-
-    // Initialize Auth API
-    this.auth = new AuthAPI(this.config)
+${authInitBlock}
 ${pluginInitsBlock}
 ${propertyInits}
 ${standaloneInits}
