@@ -13,6 +13,8 @@ export interface SseConnectionOptions {
     headers?: Record<string, string>
     onEvent: (event: SseEvent) => void
     onError?: (error: unknown) => void
+    /** Keep the process alive while waiting to reconnect (standalone CLI). */
+    keepAlive?: boolean
 }
 
 /**
@@ -71,7 +73,7 @@ export class SseConnection {
             this.reconnectTimer = null
             this.connect()
         }, this.backoff)
-        this.reconnectTimer.unref()
+        if (!this.opts.keepAlive) this.reconnectTimer.unref()
         this.backoff = Math.min(this.backoff * 2, SseConnection.MAX_BACKOFF)
     }
 

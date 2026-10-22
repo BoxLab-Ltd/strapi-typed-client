@@ -70,6 +70,8 @@ export async function watch(options: WatchOptions): Promise<void> {
     const sse = new SseConnection({
         url: client.sseUrl,
         headers: client.getHeaders(),
+        // nothing else holds the CLI's event loop, so an unref'd reconnect timer lets Node exit on a Strapi restart
+        keepAlive: true,
         async onEvent({ event, data }) {
             if (event !== 'connected' || generating) return
 
