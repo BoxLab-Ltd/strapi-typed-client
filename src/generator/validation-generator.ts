@@ -178,12 +178,6 @@ export const MultiMediaInputSchema = z.array(StrapiIDSchema).nullable()
                         : `z.array(z.discriminatedUnion('__component', [${members.join(', ')}]))`
                 break
             }
-            case 'locale':
-                schema = 'z.string()'
-                break
-            case 'publishedAt':
-                schema = 'z.string().nullable()'
-                break
         }
         if (field.optional) schema += '.optional()'
         return `  ${JSON.stringify(field.name)}: ${schema},`

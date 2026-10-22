@@ -249,7 +249,7 @@ describe('ClientGenerator', () => {
             expect(output).toContain('class BaseAPI')
             expect(output).toContain('protected async request<R>(')
             expect(output).toContain(
-                'protected buildQueryString(params?: QueryParams): string',
+                'protected buildQueryString(params?: object): string',
             )
         })
         it('should wrap fetch in try-catch with StrapiConnectionError for network errors', () => {
@@ -477,17 +477,31 @@ describe('ClientGenerator', () => {
         })
         it('should generate create method with TCreateInput | FormData', () => {
             expect(output).toContain(
-                'async create(data: TCreateInput | FormData, nextOptions?: NextOptions): Promise<TBase>',
+                'create(data: TCreateInput | FormData, params?: WriteParams<TLocalized, TDraftAndPublish>, nextOptions?: NextOptions): Promise<TBase>',
             )
         })
         it('should generate update method', () => {
             expect(output).toContain(
-                'async update(documentId: string, data: TUpdateInput | FormData, nextOptions?: NextOptions): Promise<TBase>',
+                'update(documentId: string, data: TUpdateInput | FormData, params?: WriteParams<TLocalized, TDraftAndPublish>, nextOptions?: NextOptions): Promise<TBase>',
             )
         })
         it('should generate delete method', () => {
             expect(output).toContain(
-                'async delete(documentId: string, nextOptions?: NextOptions): Promise<TBase | null>',
+                'delete(documentId: string, params?: DeleteParams<TLocalized>, nextOptions?: NextOptions): Promise<TBase | null>',
+            )
+        })
+        // Strapi reads locale and status from the query string only (#105)
+        it('sends the write params in the query string', () => {
+            expect(output).toContain(
+                '/api/${this.endpoint}/${documentId}${this.buildQueryString(params)}',
+            )
+        })
+        it('keeps the pre-params nextOptions position as a deprecated overload', () => {
+            expect(output).toContain(
+                '/** @deprecated Pass Next.js options as the third argument: `create(data, {}, nextOptions)`. */',
+            )
+            expect(output).toContain(
+                'create(data: TCreateInput | FormData, nextOptions: NextOptions): Promise<TBase>',
             )
         })
     })
@@ -586,7 +600,7 @@ describe('ClientGenerator', () => {
             )
             expect(nonArrayReturns).not.toBeNull()
         })
-        it('should generate update method (no delete, no create)', () => {
+        it('should generate update and delete methods (no create)', () => {
             const section = output.slice(
                 output.indexOf('class SingleTypeAPI<'),
                 output.indexOf(
@@ -594,9 +608,11 @@ describe('ClientGenerator', () => {
                 ),
             )
             expect(section).toContain(
-                'async update(data: TUpdateInput | FormData, nextOptions?: NextOptions): Promise<TBase>',
+                'update(data: TUpdateInput | FormData, params?: WriteParams<TLocalized, TDraftAndPublish>, nextOptions?: NextOptions): Promise<TBase>',
             )
-            expect(section).not.toContain('async delete(')
+            expect(section).toContain(
+                'async delete(params?: DeleteParams<TLocalized>, nextOptions?: NextOptions): Promise<TBase | null>',
+            )
             expect(section).not.toContain('async create(')
         })
     })
@@ -627,20 +643,21 @@ describe('ClientGenerator', () => {
                 "this.homepage = new SingleTypeAPI('homepage', this.config)",
             )
         })
-        it('should include type parameters for types with populatable fields (5 params)', () => {
+        // The fixture predates the localized/draftAndPublish flags, so both stay open as `boolean`
+        it('should include type parameters for types with populatable fields', () => {
             expect(output).toContain(
-                'items: CollectionAPI<Item, ItemCreateInput, ItemUpdateInput, ItemFilters, ItemPopulateParam>',
+                'items: CollectionAPI<Item, ItemCreateInput, ItemUpdateInput, ItemFilters, ItemPopulateParam, boolean, boolean>',
             )
             expect(output).toContain(
-                'users: UsersPermissionsUserAPI<User, UserCreateInput, UserUpdateInput, UserFilters, UserPopulateParam>',
+                'users: UsersPermissionsUserAPI<User, UserCreateInput, UserUpdateInput, UserFilters, UserPopulateParam, boolean, boolean>',
             )
             expect(output).toContain(
-                'homepage: SingleTypeAPI<Homepage, HomepageUpdateInput, HomepageFilters, HomepagePopulateParam>',
+                'homepage: SingleTypeAPI<Homepage, HomepageUpdateInput, HomepageFilters, HomepagePopulateParam, boolean, boolean>',
             )
         })
-        it('should include type parameters for types without populatable fields (4 params)', () => {
+        it('should include type parameters for types without populatable fields', () => {
             expect(output).toContain(
-                'categories: CollectionAPI<Category, CategoryCreateInput, CategoryUpdateInput, CategoryFilters>',
+                'categories: CollectionAPI<Category, CategoryCreateInput, CategoryUpdateInput, CategoryFilters, Record<string, any>, boolean, boolean>',
             )
         })
         it('should have setToken method', () => {
@@ -683,7 +700,7 @@ describe('ClientGenerator', () => {
             const result = new ClientGenerator().generate(schema)
 
             expect(result).toContain(
-                'campus: CollectionAPI<Campus, CampusCreateInput, CampusUpdateInput, CampusFilters>',
+                'campus: CollectionAPI<Campus, CampusCreateInput, CampusUpdateInput, CampusFilters, Record<string, any>, boolean, boolean>',
             )
             expect(result).toContain(
                 "this.campus = new CollectionAPI('campus', this.config)",

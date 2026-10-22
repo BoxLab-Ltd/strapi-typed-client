@@ -553,10 +553,6 @@ type _ApplyFields<TFull, TBase, TEntry> = TEntry extends true ? TFull : TEntry e
                     ? `${members[0]}[]`
                     : `(${members.join(' | ')})[]`
             }
-            case 'locale':
-                return 'string'
-            case 'publishedAt':
-                return 'string | null'
         }
     }
 

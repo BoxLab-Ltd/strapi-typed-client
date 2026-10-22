@@ -20,6 +20,51 @@ describe('Schema Transformer', () => {
             expect(result.components).toHaveLength(0)
         })
 
+        it('derives the write-param flags of a content type (#105)', () => {
+            const contentType = (
+                attributes: Record<string, { type: string }>,
+                draftAndPublish?: boolean,
+            ) => ({
+                uid: 'api::item.item',
+                kind: 'collectionType' as const,
+                collectionName: 'items',
+                info: {
+                    singularName: 'item',
+                    pluralName: 'items',
+                    displayName: 'Item',
+                },
+                attributes,
+                draftAndPublish,
+            })
+            const [localized] = transformSchema({
+                contentTypes: {
+                    'api::item.item': contentType(
+                        {
+                            title: { type: 'string' },
+                            locale: { type: 'string' },
+                        },
+                        true,
+                    ),
+                },
+                components: {},
+            }).contentTypes
+            const [plain] = transformSchema({
+                contentTypes: {
+                    'api::item.item': contentType({
+                        title: { type: 'string' },
+                    }),
+                },
+                components: {},
+            }).contentTypes
+
+            expect(localized).toMatchObject({
+                localized: true,
+                draftAndPublish: true,
+            })
+            expect(plain!.localized).toBe(false)
+            expect(plain!.draftAndPublish).toBeUndefined()
+        })
+
         it('should transform a simple content type', () => {
             const extracted: ExtractedSchema = {
                 contentTypes: {

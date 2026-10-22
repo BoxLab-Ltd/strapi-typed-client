@@ -295,8 +295,8 @@ describe('generated Zod validators', { timeout: GENERATION_TIMEOUT }, () => {
         ['id in body', { ...ok, id: 1 }, false],
         ['documentId in body', { ...ok, documentId: 'x' }, false],
         ['createdAt in body', { ...ok, createdAt: '2020-01-01' }, false],
-        ['locale in body', { ...ok, locale: 'en' }, true],
-        ['publishedAt in body', { ...ok, publishedAt: null }, true],
+        ['locale in body', { ...ok, locale: 'en' }, false],
+        ['publishedAt in body', { ...ok, publishedAt: null }, false],
         ['relation documentId', { ...ok, tags: 'doc' }, true],
         [
             'relation [{ documentId }]',
@@ -416,7 +416,8 @@ describe('generated Zod validators', { timeout: GENERATION_TIMEOUT }, () => {
         )
     })
 
-    it('keeps a single locale key on an i18n content type', async () => {
+    // Strapi overwrites a body locale with the ?locale= query param (#105)
+    it('leaves locale out of an i18n content type input', async () => {
         const i18nDir = repoTmpDir('validation-i18n-')
         try {
             await new Generator(i18nDir).generate(
@@ -439,6 +440,18 @@ describe('generated Zod validators', { timeout: GENERATION_TIMEOUT }, () => {
                 },
                 { format: 'ts', validation: 'zod' },
             )
+            const out = fs.readFileSync(
+                path.join(i18nDir, 'validation.ts'),
+                'utf-8',
+            )
+            const start = out.indexOf(
+                `export const ${probe.cleanName}CreateInputSchema`,
+            )
+            const probeSchema = out.slice(
+                start,
+                out.indexOf('\nexport', start + 1),
+            )
+            expect(probeSchema).not.toContain('"locale"')
         } finally {
             fs.rmSync(i18nDir, { recursive: true, force: true })
         }

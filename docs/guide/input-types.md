@@ -31,8 +31,6 @@ When you write data, you use the input types — `ArticleCreateInput` for `creat
   category?: RelationInput        // relation — id, documentId, reference object, array, or { connect | disconnect | set }
   tags?: RelationInput            // relation (any cardinality)
   coverImage?: MediaInput         // media — file id
-  locale?: string
-  publishedAt?: string | null
 }
 ```
 
@@ -40,17 +38,17 @@ When you write data, you use the input types — `ArticleCreateInput` for `creat
 
 Both input types follow what a live Strapi 5 accepts, field by field:
 
-| Field                                   | `*CreateInput`                                               | `*UpdateInput`         |
-| --------------------------------------- | ------------------------------------------------------------ | ---------------------- |
-| Required scalar                         | required, never `null`                                       | optional, never `null` |
-| Required scalar with a schema `default` | optional — Strapi applies the default — never `null`         | optional, never `null` |
-| Optional scalar                         | optional, accepts `null`                                     | same                   |
-| Relation / media                        | always optional — Strapi does not enforce `required` on them | same                   |
-| Required single component               | required, never `null`                                       | optional, never `null` |
-| Optional single component               | optional, accepts `null`                                     | same                   |
-| Repeatable component / dynamic zone     | optional, **never `null`** — send `[]` to clear              | same                   |
-| Private and `password` fields           | accepted on write, never present on the read type            | same                   |
-| `locale`, `publishedAt` (content types) | optional                                                     | optional               |
+| Field                                   | `*CreateInput`                                                                            | `*UpdateInput`         |
+| --------------------------------------- | ----------------------------------------------------------------------------------------- | ---------------------- |
+| Required scalar                         | required, never `null`                                                                    | optional, never `null` |
+| Required scalar with a schema `default` | optional — Strapi applies the default — never `null`                                      | optional, never `null` |
+| Optional scalar                         | optional, accepts `null`                                                                  | same                   |
+| Relation / media                        | always optional — Strapi does not enforce `required` on them                              | same                   |
+| Required single component               | required, never `null`                                                                    | optional, never `null` |
+| Optional single component               | optional, accepts `null`                                                                  | same                   |
+| Repeatable component / dynamic zone     | optional, **never `null`** — send `[]` to clear                                           | same                   |
+| Private and `password` fields           | accepted on write, never present on the read type                                         | same                   |
+| `locale`, `publishedAt`                 | not in the body — pass `locale` / `status` as [write params](/reference/api#write-params) | same                   |
 
 Keys Strapi does not know — including `id`, `documentId`, `createdAt` or `createdBy` — are rejected by Strapi with `400 Invalid key`, so the input types do not carry them.
 
@@ -192,7 +190,6 @@ const result = await strapi.articles.create({
     content: 'Full article content here...',
     views: 0,
     featured: true,
-    publishedAt: '2025-01-15T10:00:00.000Z',
 
     // Relations (as IDs)
     category: 3,

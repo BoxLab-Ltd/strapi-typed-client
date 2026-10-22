@@ -227,15 +227,16 @@ const article = await strapi.articles.findOne(
 Creates a new entry.
 
 ```ts
-create(data, nextOptions?): Promise<T>
+create(data, params?, nextOptions?): Promise<T>
 ```
 
 **Parameters:**
 
-| Parameter     | Type                 | Description                                               |
-| ------------- | -------------------- | --------------------------------------------------------- |
-| `data`        | `TInput \| FormData` | The entry data (typed input or FormData for file uploads) |
-| `nextOptions` | `NextOptions`        | Next.js cache options                                     |
+| Parameter     | Type                 | Description                                                                         |
+| ------------- | -------------------- | ----------------------------------------------------------------------------------- |
+| `data`        | `TInput \| FormData` | The entry data (typed input or FormData for file uploads)                           |
+| `params`      | `WriteParams`        | `locale` and `status`, sent in the query string — see [Write params](#write-params) |
+| `nextOptions` | `NextOptions`        | Next.js cache options                                                               |
 
 **Returns:** `Promise<T>` -- the created entry.
 
@@ -264,16 +265,17 @@ const article = await strapi.articles.create(formData)
 Updates an existing entry by its document ID.
 
 ```ts
-update(documentId, data, nextOptions?): Promise<T>
+update(documentId, data, params?, nextOptions?): Promise<T>
 ```
 
 **Parameters:**
 
-| Parameter     | Type                 | Description            |
-| ------------- | -------------------- | ---------------------- |
-| `documentId`  | `string`             | The Strapi document ID |
-| `data`        | `TInput \| FormData` | Partial entry data     |
-| `nextOptions` | `NextOptions`        | Next.js cache options  |
+| Parameter     | Type                 | Description                                               |
+| ------------- | -------------------- | --------------------------------------------------------- |
+| `documentId`  | `string`             | The Strapi document ID                                    |
+| `data`        | `TInput \| FormData` | Partial entry data                                        |
+| `params`      | `WriteParams`        | `locale` and `status` — see [Write params](#write-params) |
+| `nextOptions` | `NextOptions`        | Next.js cache options                                     |
 
 **Returns:** `Promise<T>` -- the updated entry.
 
@@ -296,21 +298,42 @@ const cleared = await strapi.articles.update('abc123', {
 Deletes an entry by its document ID.
 
 ```ts
-delete(documentId, nextOptions?): Promise<T | null>
+delete(documentId, params?, nextOptions?): Promise<T | null>
 ```
 
 **Parameters:**
 
-| Parameter     | Type          | Description            |
-| ------------- | ------------- | ---------------------- |
-| `documentId`  | `string`      | The Strapi document ID |
-| `nextOptions` | `NextOptions` | Next.js cache options  |
+| Parameter     | Type           | Description                                                                           |
+| ------------- | -------------- | ------------------------------------------------------------------------------------- |
+| `documentId`  | `string`       | The Strapi document ID                                                                |
+| `params`      | `DeleteParams` | `locale` only — Strapi deletes every status of that locale; `'*'` deletes all locales |
+| `nextOptions` | `NextOptions`  | Next.js cache options                                                                 |
 
 **Returns:** `Promise<T | null>` -- the deleted entry, or null.
 
 ```ts
 const deleted = await strapi.articles.delete('abc123')
+// Only the French localization
+await strapi.articles.delete('abc123', { locale: 'fr' })
 ```
+
+### Write params
+
+Strapi reads `locale` and `status` for a write **only from the query string**. In the request body it overwrites `data.locale` with the query value (the default locale when none is given) and recomputes `publishedAt` from `status`, so the input types do not carry those keys.
+
+```ts
+// Create the French localization of an existing document
+await strapi.articles.update('abc123', { title: 'Bonjour' }, { locale: 'fr' })
+
+// Save a draft instead of publishing
+await strapi.articles.create({ title: 'WIP' }, { status: 'draft' })
+```
+
+The params are typed from the schema: `locale` exists only on localized content types, `status` only on Draft & Publish types. Anything else is a type error, because Strapi would ignore it. An older plugin on the Strapi side does not report Draft & Publish; `status` then stays open on every type until the plugin is updated.
+
+::: tip Upgrading
+Before these params existed, `nextOptions` was the second argument of `create` and `delete` and the third of `update`. That form still works and is marked `@deprecated`: `create(data, { revalidate: 60 })` keeps sending Next.js options. Move them one position to the right: `create(data, {}, { revalidate: 60 })`.
+:::
 
 ## Single Type API
 
@@ -339,17 +362,34 @@ const homepage = await strapi.homepage.find({
 Updates the single type entry. No `documentId` is needed.
 
 ```ts
-update(data, nextOptions?): Promise<T>
+update(data, params?, nextOptions?): Promise<T>
 ```
 
 ```ts
 const updated = await strapi.homepage.update({
     heroTitle: 'Welcome to our site',
 })
+
+// The German version of a localized single type
+await strapi.homepage.update({ heroTitle: 'Willkommen' }, { locale: 'de' })
+```
+
+The first `update` creates the entry. Until then `find` throws a `StrapiError` with `status: 404`.
+
+### delete
+
+Deletes the single type entry.
+
+```ts
+delete(params?, nextOptions?): Promise<T | null>
+```
+
+```ts
+await strapi.homepage.delete({ locale: 'de' })
 ```
 
 ::: info
-Single types do not have `findOne`, `create`, or `delete` methods. Use `find` to read and `update` to modify.
+Single types do not have `findOne` or `create`. Use `find` to read and `update` to create or modify.
 :::
 
 ## Authentication API
@@ -562,7 +602,7 @@ See the [Strapi documentation on status](https://docs.strapi.io/cms/api/rest/sta
 
 ## NextOptions
 
-Optional **last** parameter on every generated method that issues a request — CRUD, auth, plugin APIs and your own custom routes alike. The position shifts with the method's own parameters (`find(params?, nextOptions?)`, `update(documentId, data, nextOptions?)`), so pass `undefined` for the ones you are skipping.
+Optional **last** parameter on every generated method that issues a request — CRUD, auth, plugin APIs and your own custom routes alike. The position shifts with the method's own parameters (`find(params?, nextOptions?)`, `update(documentId, data, params?, nextOptions?)`), so pass `undefined` for the ones you are skipping.
 
 ```ts
 interface NextOptions {

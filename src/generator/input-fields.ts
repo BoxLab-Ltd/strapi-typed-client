@@ -20,8 +20,6 @@ export type InputField = { name: string; optional: boolean } & (
           nullable: boolean
       }
     | { kind: 'dynamiczone'; componentTypes: string[] }
-    | { kind: 'locale' }
-    | { kind: 'publishedAt' }
 )
 
 // Each rule mirrors what a live Strapi 5 accepts on create/update (see input-types docs)
@@ -36,6 +34,8 @@ export function inputFields(
     if (!isContentType) fields.push({ name: 'id', optional: true, kind: 'id' })
 
     for (const attr of type.attributes) {
+        // Strapi overwrites data.locale with the query param, so a body value only ever hits the default locale (#105)
+        if (isContentType && attr.name === 'locale') continue
         // Strapi applies a schema default before checking `required`
         const hasDefault =
             attr.defaultValue !== undefined && attr.defaultValue !== null
@@ -81,19 +81,6 @@ export function inputFields(
             componentTypes: dz.componentTypes,
         })
     }
-    // i18n content types already carry `locale` as an attribute
-    const taken = new Set(fields.map(f => f.name))
-    if (isContentType && !taken.has('locale')) {
-        fields.push({ name: 'locale', optional: true, kind: 'locale' })
-    }
-    if (isContentType && !taken.has('publishedAt')) {
-        fields.push({
-            name: 'publishedAt',
-            optional: true,
-            kind: 'publishedAt',
-        })
-    }
-
     return fields
 }
 

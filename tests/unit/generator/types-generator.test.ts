@@ -900,9 +900,10 @@ describe('TypesGenerator', () => {
             )
         })
 
-        it('accepts the top-level locale and publishedAt keys on content types only', () => {
-            expect(create).toContain('locale?: string | undefined;')
-            expect(create).toContain('publishedAt?: string | null | undefined;')
+        // Strapi takes both without a 400 but overwrites them from ?locale= / ?status= (#105)
+        it('leaves locale and publishedAt out of the body inputs', () => {
+            expect(create).not.toContain('locale?:')
+            expect(create).not.toContain('publishedAt?:')
             expect(
                 sliceInterface(out, 'export interface ProbePartCreateInput {'),
             ).not.toContain('locale')

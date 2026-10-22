@@ -138,6 +138,9 @@ function transformContentType(uid: string, ct: StrapiContentType): ContentType {
         media,
         components: componentFields,
         dynamicZones,
+        // i18n adds a `locale` attribute to localized content types only
+        localized: 'locale' in ct.attributes,
+        draftAndPublish: ct.draftAndPublish,
     }
 }
 

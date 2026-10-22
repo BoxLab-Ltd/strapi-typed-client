@@ -72,6 +72,59 @@ describe('generated client runtime behaviour', () => {
         )
     })
 
+    // Strapi reads locale and status only from the query string on writes (#105)
+    it('sends write params in the query string', async () => {
+        const { fetch, calls } = recordingFetch(() => json({ data: {} }))
+        const client = new StrapiClient({ baseURL: 'http://x', fetch })
+        await client.items.create(
+            { title: 'a' },
+            { locale: 'fr', status: 'draft' },
+        )
+        await client.items.update('doc', { title: 'b' }, { locale: 'fr' })
+        await client.items.delete('doc', { locale: '*' })
+        await client.homepage.update({ title: 'c' }, { locale: 'de' })
+        await client.homepage.delete({ locale: 'de' })
+
+        expect(
+            calls.map(c => `${c.init.method} ${decodeURIComponent(c.url)}`),
+        ).toEqual([
+            'POST http://x/api/items?locale=fr&status=draft',
+            'PUT http://x/api/items/doc?locale=fr',
+            'DELETE http://x/api/items/doc?locale=*',
+            'PUT http://x/api/homepage?locale=de',
+            'DELETE http://x/api/homepage?locale=de',
+        ])
+        expect(JSON.parse(String(calls[0]!.init.body))).toEqual({
+            data: { title: 'a' },
+        })
+    })
+
+    it('still takes nextOptions as the second argument of the pre-params calls', async () => {
+        const { fetch, calls } = recordingFetch(() => json({ data: {} }))
+        const client = new StrapiClient({ baseURL: 'http://x', fetch })
+        await client.items.create({ title: 'a' }, { headers: { 'x-a': '1' } })
+        await client.items.update(
+            'doc',
+            { title: 'b' },
+            { headers: { 'x-a': '2' } },
+        )
+        await client.items.delete('doc', { headers: { 'x-a': '3' } })
+        await client.homepage.update(
+            { title: 'c' },
+            { headers: { 'x-a': '4' } },
+        )
+
+        expect(calls.map(c => c.url)).toEqual([
+            'http://x/api/items',
+            'http://x/api/items/doc',
+            'http://x/api/items/doc',
+            'http://x/api/homepage',
+        ])
+        expect(
+            calls.map(c => (c.init.headers as Record<string, string>)['x-a']),
+        ).toEqual(['1', '2', '3', '4'])
+    })
+
     it('onRequest mutating in place reaches fetch', async () => {
         const { fetch, calls } = recordingFetch(() => json({ data: [] }))
         const client = new StrapiClient({

@@ -130,6 +130,8 @@ function extractContentType(ct: any): StrapiContentType | null {
         },
         attributes: filterAttributes(ct.attributes || {}),
         ...withPrivate(ct.attributes),
+        // Same test as Strapi's contentTypes.hasDraftAndPublish
+        draftAndPublish: ct.options?.draftAndPublish === true,
     }
 }
 

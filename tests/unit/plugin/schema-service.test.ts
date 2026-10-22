@@ -131,3 +131,20 @@ describe('plugin schema service — private attributes', () => {
         expect(Object.keys(attributes)).not.toContain('hiddenTag')
     })
 })
+
+describe('plugin schema service — Draft & Publish', () => {
+    function draftAndPublishOf(options: unknown) {
+        const strapi = strapiStub(false)
+        Object.assign(strapi.contentTypes['api::article.article'], { options })
+        const service = schemaService({ strapi } as { strapi: never })
+        return service.extractSchema().contentTypes['api::article.article']!
+            .draftAndPublish
+    }
+
+    // the CLI types `status` on writes from this flag (#105)
+    it('reports the flag exactly as Strapi tests it', () => {
+        expect(draftAndPublishOf({ draftAndPublish: true })).toBe(true)
+        expect(draftAndPublishOf({ draftAndPublish: false })).toBe(false)
+        expect(draftAndPublishOf(undefined)).toBe(false)
+    })
+})

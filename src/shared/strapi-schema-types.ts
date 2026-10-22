@@ -52,6 +52,8 @@ export interface StrapiContentType {
     attributes: Record<string, StrapiAttribute>
     // Writable but never returned; a separate key so older CLIs ignore them
     privateAttributes?: Record<string, StrapiAttribute>
+    // Absent from older plugins, so the CLI cannot assume false
+    draftAndPublish?: boolean
 }
 
 /**

@@ -78,6 +78,13 @@ function allowUndefinedOnOptionalProperties(sf: SourceFile): void {
     }
 }
 
+const NEXT_OPTIONS_PROPERTIES = [
+    { name: 'revalidate', type: 'number | false' },
+    { name: 'tags', type: 'string[]' },
+    { name: 'cache', type: 'RequestCache' },
+    { name: 'headers', type: 'Record<string, string | undefined>' },
+]
+
 // The plugin can be disabled, and then neither its content types nor its auth routes exist (#99)
 function hasUsersPermissions(schema: ParsedSchema): boolean {
     return schema.contentTypes.some(ct => ct.name === USERS_PERMISSIONS_USER)
@@ -425,28 +432,33 @@ export class ClientGenerator {
         sf.addInterface({
             name: 'NextOptions',
             isExported: true,
-            properties: [
-                {
-                    name: 'revalidate',
-                    type: 'number | false',
-                    hasQuestionToken: true,
-                },
-                {
-                    name: 'tags',
-                    type: 'string[]',
-                    hasQuestionToken: true,
-                },
-                {
-                    name: 'cache',
-                    type: 'RequestCache',
-                    hasQuestionToken: true,
-                },
-                {
-                    name: 'headers',
-                    type: 'Record<string, string | undefined>',
-                    hasQuestionToken: true,
-                },
+            properties: NEXT_OPTIONS_PROPERTIES.map(p => ({
+                ...p,
+                hasQuestionToken: true,
+            })),
+        })
+
+        sf.addTypeAlias({
+            name: 'WriteParams',
+            isExported: true,
+            typeParameters: [
+                { name: 'TLocalized', constraint: 'boolean' },
+                { name: 'TDraftAndPublish', constraint: 'boolean' },
             ],
+            docs: [
+                'Query params Strapi reads on create and update. `locale` exists only on localized types, `status` only on Draft & Publish types.',
+            ],
+            type: "(TLocalized extends true ? { locale?: string | undefined } : { locale?: never }) & (TDraftAndPublish extends true ? { status?: 'draft' | 'published' | undefined } : { status?: never })",
+        })
+
+        sf.addTypeAlias({
+            name: 'DeleteParams',
+            isExported: true,
+            typeParameters: [{ name: 'TLocalized', constraint: 'boolean' }],
+            docs: [
+                'Query params Strapi reads on delete: it drops `status` and deletes every status of the locale (`*` = all locales).',
+            ],
+            type: 'TLocalized extends true ? { locale?: string | undefined } : { locale?: never }',
         })
 
         // RequestConfig — the outgoing request as seen by onRequest
@@ -860,9 +872,21 @@ function authHeaderValues(headers: Record<string, string>): string[] {
 // RequestInit that also takes an explicit undefined, which exactOptionalPropertyTypes otherwise rejects
 type RequestOptions = { [K in keyof RequestInit]?: RequestInit[K] | undefined } & { next?: unknown }
 
+// Older releases took nextOptions as the second argument of create/update/delete; its keys never overlap the write params
+const NEXT_OPTION_KEYS: readonly string[] = ${JSON.stringify(NEXT_OPTIONS_PROPERTIES.map(p => p.name))}
+
 // Base API class with shared logic
 class BaseAPI {
   constructor(protected config: StrapiClientConfig) {}
+
+  protected splitWriteArgs(params: any, nextOptions: any): [any, any] {
+    const keys = params !== null && typeof params === 'object' ? Object.keys(params) : []
+    const legacy =
+      nextOptions === undefined &&
+      keys.length > 0 &&
+      keys.every(k => NEXT_OPTION_KEYS.includes(k))
+    return legacy ? [undefined, params] : [params, nextOptions]
+  }
 
   protected _authMode(): 'legacy' | 'refresh' {
     return this.config.authMode ?? AUTH_MODE
@@ -1262,7 +1286,7 @@ class BaseAPI {
     return response.json()
   }
 
-  protected buildQueryString(params?: QueryParams): string {
+  protected buildQueryString(params?: object): string {
     if (!params) return ''
     const query = stringifyQuery(params as Record<string, unknown>)
     return query ? \`?\${query}\` : ''
@@ -1307,7 +1331,9 @@ class CollectionAPI<
   TCreateInput = Partial<TBase>,
   TUpdateInput = Partial<TBase>,
   TFilters = Record<string, any>,
-  TPopulateKeys extends Record<string, any> = Record<string, any>
+  TPopulateKeys extends Record<string, any> = Record<string, any>,
+  TLocalized extends boolean = boolean,
+  TDraftAndPublish extends boolean = boolean
 > extends BaseAPI {
   constructor(
     protected endpoint: string,
@@ -1414,13 +1440,18 @@ class CollectionAPI<
     return this.unwrap(response)
   }
 
-  async create(data: TCreateInput | FormData, nextOptions?: NextOptions): Promise<TBase> {
+  /** @deprecated Pass Next.js options as the third argument: \`create(data, {}, nextOptions)\`. */
+  create(data: TCreateInput | FormData, nextOptions: NextOptions): Promise<TBase>
+  create(data: TCreateInput | FormData, params?: WriteParams<TLocalized, TDraftAndPublish>, nextOptions?: NextOptions): Promise<TBase>
+
+  async create(data: TCreateInput | FormData, params?: any, nextOptions?: NextOptions): Promise<TBase> {
+    ;[params, nextOptions] = this.splitWriteArgs(params, nextOptions)
     // FormData is sent as-is; everything else goes through the envelope hook
     const body = data instanceof FormData
       ? data
       : JSON.stringify(this.wrapBody(data))
 
-    const url = \`\${this.config.baseURL}/api/\${this.endpoint}\`
+    const url = \`\${this.config.baseURL}/api/\${this.endpoint}\${this.buildQueryString(params)}\`
     const response = await this.request<StrapiResponse<TBase>>(
       url,
       {
@@ -1432,13 +1463,18 @@ class CollectionAPI<
     return this.unwrap(response)
   }
 
-  async update(documentId: string, data: TUpdateInput | FormData, nextOptions?: NextOptions): Promise<TBase> {
+  /** @deprecated Pass Next.js options as the fourth argument: \`update(documentId, data, {}, nextOptions)\`. */
+  update(documentId: string, data: TUpdateInput | FormData, nextOptions: NextOptions): Promise<TBase>
+  update(documentId: string, data: TUpdateInput | FormData, params?: WriteParams<TLocalized, TDraftAndPublish>, nextOptions?: NextOptions): Promise<TBase>
+
+  async update(documentId: string, data: TUpdateInput | FormData, params?: any, nextOptions?: NextOptions): Promise<TBase> {
+    ;[params, nextOptions] = this.splitWriteArgs(params, nextOptions)
     // FormData is sent as-is; everything else goes through the envelope hook
     const body = data instanceof FormData
       ? data
       : JSON.stringify(this.wrapBody(data))
 
-    const url = \`\${this.config.baseURL}/api/\${this.endpoint}/\${documentId}\`
+    const url = \`\${this.config.baseURL}/api/\${this.endpoint}/\${documentId}\${this.buildQueryString(params)}\`
     const response = await this.request<StrapiResponse<TBase>>(
       url,
       {
@@ -1450,8 +1486,13 @@ class CollectionAPI<
     return this.unwrap(response)
   }
 
-  async delete(documentId: string, nextOptions?: NextOptions): Promise<TBase | null> {
-    const url = \`\${this.config.baseURL}/api/\${this.endpoint}/\${documentId}\`
+  /** @deprecated Pass Next.js options as the third argument: \`delete(documentId, {}, nextOptions)\`. */
+  delete(documentId: string, nextOptions: NextOptions): Promise<TBase | null>
+  delete(documentId: string, params?: DeleteParams<TLocalized>, nextOptions?: NextOptions): Promise<TBase | null>
+
+  async delete(documentId: string, params?: any, nextOptions?: NextOptions): Promise<TBase | null> {
+    ;[params, nextOptions] = this.splitWriteArgs(params, nextOptions)
+    const url = \`\${this.config.baseURL}/api/\${this.endpoint}/\${documentId}\${this.buildQueryString(params)}\`
     const response = await this.request<StrapiResponse<TBase> | null>(
       url,
       {
@@ -1470,7 +1511,9 @@ class SingleTypeAPI<
   TBase,
   TUpdateInput = Partial<TBase>,
   TFilters = Record<string, any>,
-  TPopulateKeys extends Record<string, any> = Record<string, any>
+  TPopulateKeys extends Record<string, any> = Record<string, any>,
+  TLocalized extends boolean = boolean,
+  TDraftAndPublish extends boolean = boolean
 > extends BaseAPI {
   constructor(
     protected endpoint: string,
@@ -1507,13 +1550,18 @@ class SingleTypeAPI<
     return response.data
   }
 
-  async update(data: TUpdateInput | FormData, nextOptions?: NextOptions): Promise<TBase> {
+  /** @deprecated Pass Next.js options as the third argument: \`update(data, {}, nextOptions)\`. */
+  update(data: TUpdateInput | FormData, nextOptions: NextOptions): Promise<TBase>
+  update(data: TUpdateInput | FormData, params?: WriteParams<TLocalized, TDraftAndPublish>, nextOptions?: NextOptions): Promise<TBase>
+
+  async update(data: TUpdateInput | FormData, params?: any, nextOptions?: NextOptions): Promise<TBase> {
+    ;[params, nextOptions] = this.splitWriteArgs(params, nextOptions)
     // If data is FormData, use it directly; otherwise wrap in { data } and JSON stringify
     const body = data instanceof FormData
       ? data
       : JSON.stringify({ data })
 
-    const url = \`\${this.config.baseURL}/api/\${this.endpoint}\`
+    const url = \`\${this.config.baseURL}/api/\${this.endpoint}\${this.buildQueryString(params)}\`
     const response = await this.request<StrapiResponse<TBase>>(
       url,
       {
@@ -1523,6 +1571,18 @@ class SingleTypeAPI<
       nextOptions
     )
     return response.data
+  }
+
+  async delete(params?: DeleteParams<TLocalized>, nextOptions?: NextOptions): Promise<TBase | null> {
+    const url = \`\${this.config.baseURL}/api/\${this.endpoint}\${this.buildQueryString(params)}\`
+    const response = await this.request<StrapiResponse<TBase> | null>(
+      url,
+      {
+        method: 'DELETE',
+      },
+      nextOptions
+    )
+    return response?.data ?? null
   }
 }`
     }
@@ -1535,8 +1595,10 @@ class UsersPermissionsUserAPI<
   TCreateInput = Partial<TBase>,
   TUpdateInput = Partial<TBase>,
   TFilters = Record<string, any>,
-  TPopulateKeys extends Record<string, any> = Record<string, any>
-> extends CollectionAPI<TBase, TCreateInput, TUpdateInput, TFilters, TPopulateKeys> {
+  TPopulateKeys extends Record<string, any> = Record<string, any>,
+  TLocalized extends boolean = boolean,
+  TDraftAndPublish extends boolean = boolean
+> extends CollectionAPI<TBase, TCreateInput, TUpdateInput, TFilters, TPopulateKeys, TLocalized, TDraftAndPublish> {
   protected override wrapBody(data: any): any {
     return data
   }
@@ -1627,14 +1689,17 @@ ${customMethods}
             contentType.dynamicZones.length > 0
 
         const name = contentType.cleanName
+        const populate = hasPopulatableFields
+            ? `${name}PopulateParam`
+            : 'Record<string, any>'
+        // An unknown flag stays `boolean`, which keeps both params open
+        const localized = String(contentType.localized ?? 'boolean')
+        const draftAndPublish = String(contentType.draftAndPublish ?? 'boolean')
         const inputs =
             contentType.kind === 'single'
                 ? `${name}UpdateInput`
                 : `${name}CreateInput, ${name}UpdateInput`
-        if (hasPopulatableFields) {
-            return `<${name}, ${inputs}, ${name}Filters, ${name}PopulateParam>`
-        }
-        return `<${name}, ${inputs}, ${name}Filters>`
+        return `<${name}, ${inputs}, ${name}Filters, ${populate}, ${localized}, ${draftAndPublish}>`
     }
 
     /**

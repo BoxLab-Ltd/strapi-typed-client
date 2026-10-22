@@ -147,8 +147,35 @@ const authSingle: ContentType = {
     dynamicZones: [],
 }
 
+// Write params are typed per content type; `projects` keeps the flags unset, as an older plugin sends them (#105)
+const WRITE_FLAGS: Record<string, Partial<ContentType>> = {
+    Item: { localized: true, draftAndPublish: true },
+    Category: { localized: false, draftAndPublish: false },
+    Homepage: { localized: true, draftAndPublish: false },
+}
+
+const withWriteFlags = (ct: ContentType): ContentType => {
+    const flags = WRITE_FLAGS[ct.cleanName]
+    if (!flags) return ct
+    return {
+        ...ct,
+        ...flags,
+        // i18n adds this attribute to every localized type
+        attributes: flags.localized
+            ? [
+                  ...ct.attributes,
+                  { name: 'locale', type: { kind: 'string' }, required: false },
+              ]
+            : ct.attributes,
+    }
+}
+
 const schema: ParsedSchema = {
-    contentTypes: [...mockSchema.contentTypes, widget, authSingle],
+    contentTypes: [
+        ...mockSchema.contentTypes.map(withWriteFlags),
+        widget,
+        authSingle,
+    ],
     components: [...mockSchema.components, projectMeta],
 }
 
@@ -288,12 +315,38 @@ async function _assert() {
   const pj = (await client.projects.find({ populate: { images: true, config: true } }))[0]!
   const _imgs: null extends _Present<typeof pj.images> ? false : true = true
   const _cfg: null extends _Present<typeof pj.config> ? false : true = true
-  void [_img, _imgList, _imgStar, _details, _banner, _imgs, _cfg]
   // a missing document is a 404 StrapiError, so neither read resolves to null (#106, #102)
   const fo = await client.items.findOne('id')
   const _fo: null extends typeof fo ? false : true = true
   const _st: null extends typeof home ? false : true = true
-  void [_fo, _st]
+  void [_img, _imgList, _imgStar, _details, _banner, _imgs, _cfg, _fo, _st]
+  // write params follow what Strapi reads for the type (#105)
+  await client.items.create({ title: 'x' }, { locale: 'fr', status: 'draft' })
+  await client.items.update('id', {}, { locale: 'fr' }, { revalidate: 60 })
+  await client.items.delete('id', { locale: '*' })
+  // @ts-expect-error - Strapi drops status on delete
+  await client.items.delete('id', { status: 'draft' })
+  // @ts-expect-error - locale is a query param; in the body Strapi overwrites it
+  await client.items.update('id', { locale: 'fr' })
+  // @ts-expect-error - so is the publication state
+  await client.items.update('id', { publishedAt: null })
+  // @ts-expect-error - categories are not localized
+  await client.categories.update('id', {}, { locale: 'fr' })
+  // @ts-expect-error - categories have no Draft & Publish
+  await client.categories.update('id', {}, { status: 'draft' })
+  // @ts-expect-error - nor can a non-localized type delete by locale
+  await client.categories.delete('id', { locale: 'fr' })
+  await client.homepage.update({}, { locale: 'fr' })
+  await client.homepage.delete({ locale: 'fr' })
+  // @ts-expect-error - the homepage has no Draft & Publish
+  await client.homepage.update({}, { status: 'draft' })
+  // flags an older plugin does not send keep both params open
+  await client.projects.update('id', {}, { locale: 'fr', status: 'draft' })
+  // the pre-params position of nextOptions still compiles
+  await client.items.create({ title: 'x' }, { headers: { a: 'b' } })
+  await client.items.update('id', {}, { revalidate: 60 })
+  await client.items.delete('id', { tags: ['t'] })
+  await client.homepage.update({}, { cache: 'no-store' })
 }
 void _assert
 `

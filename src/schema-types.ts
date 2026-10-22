@@ -18,6 +18,8 @@ export interface ContentType {
     media: MediaField[] // Media fields require populate
     components: ComponentField[] // Component fields require populate
     dynamicZones: DynamicZoneField[] // Dynamic zone fields require populate
+    localized?: boolean // i18n enabled; Strapi then reads `locale` from the query on writes
+    draftAndPublish?: boolean // undefined when the plugin predates the flag
 }
 
 export interface Component {
