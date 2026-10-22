@@ -188,7 +188,7 @@ console.log(response.meta.pagination) // { page: 1, pageSize: 10, pageCount: 5, 
 Fetches a single entry by its document ID.
 
 ```ts
-findOne(documentId, params?, nextOptions?): Promise<T | null>
+findOne(documentId, params?, nextOptions?): Promise<T>
 ```
 
 **Parameters:**
@@ -199,7 +199,7 @@ findOne(documentId, params?, nextOptions?): Promise<T | null>
 | `params`      | `QueryParams` | Query parameters (populate, fields) |
 | `nextOptions` | `NextOptions` | Next.js cache options               |
 
-**Returns:** `Promise<T | null>`
+**Returns:** `Promise<T>`. A missing document throws a [`StrapiError`](#strapierror) with `status: 404` and `errorName: 'NotFoundError'`: Strapi answers 404, never `{ data: null }`.
 
 ```ts
 // Basic findOne
@@ -662,12 +662,12 @@ class StrapiError extends Error {
 
 The error message also includes a contextual hint for common HTTP status codes:
 
-| Status | Hint                                                                                 |
-| ------ | ------------------------------------------------------------------------------------ |
-| 401    | Check that your API token is valid and passed to StrapiClient config.                |
-| 403    | Your token may lack permissions for this endpoint. Check Strapi roles & permissions. |
-| 404    | This endpoint may not exist. Verify the content type is created in Strapi.           |
-| 500    | Internal Strapi error. Check Strapi server logs for details.                         |
+| Status | Hint                                                                                                  |
+| ------ | ----------------------------------------------------------------------------------------------------- |
+| 401    | Check that your API token is valid and passed to StrapiClient config.                                 |
+| 403    | Your token may lack permissions for this endpoint. Check Strapi roles & permissions.                  |
+| 404    | The document does not exist, or this endpoint does not. Verify the content type is created in Strapi. |
+| 500    | Internal Strapi error. Check Strapi server logs for details.                                          |
 
 ### Known error names
 

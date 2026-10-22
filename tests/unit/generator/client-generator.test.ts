@@ -320,7 +320,9 @@ describe('ClientGenerator', () => {
             expect(output).toContain('getErrorHint')
             expect(output).toContain('check that your API token is valid')
             expect(output).toContain('your token may lack permissions')
-            expect(output).toContain('this endpoint may not exist')
+            expect(output).toContain(
+                'the document does not exist, or this endpoint does not',
+            )
             expect(output).toContain('internal Strapi error')
         })
         it('should support timeout via AbortController', () => {

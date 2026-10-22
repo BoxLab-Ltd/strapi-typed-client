@@ -970,7 +970,7 @@ class BaseAPI {
     switch (status) {
       case 401: return ' Hint: check that your API token is valid and passed to StrapiClient config.'
       case 403: return ' Hint: your token may lack permissions for this endpoint. Check Strapi roles & permissions.'
-      case 404: return ' Hint: this endpoint may not exist. Verify the content type is created in Strapi and the API is enabled.'
+      case 404: return ' Hint: the document does not exist, or this endpoint does not (verify the content type is created in Strapi and the API is enabled).'
       case 500: return ' Hint: internal Strapi error. Check Strapi server logs for details.'
       default: return ''
     }
@@ -1350,25 +1350,25 @@ class CollectionAPI<
     documentId: string,
     params: { populate: TPopulate } & QueryParams<TBase, TFilters, TPopulate, TFields>,
     nextOptions?: NextOptions
-  ): Promise<SelectFields<GetPopulated<TBase, TPopulate>, TBase, TFields> | null>
+  ): Promise<SelectFields<GetPopulated<TBase, TPopulate>, TBase, TFields>>
   // Overload: with populate '*' or true → all fields populated
   findOne<const TFields extends Exclude<keyof TBase & string, '__typename'> = never>(
     documentId: string,
     params: { populate: '*' | true } & QueryParams<TBase, TFilters, '*' | true, TFields>,
     nextOptions?: NextOptions
-  ): Promise<SelectFields<GetPopulated<TBase, '*'>, TBase, TFields> | null>
+  ): Promise<SelectFields<GetPopulated<TBase, '*'>, TBase, TFields>>
   // Overload: with populate array → populated return type
   findOne<const TPopulate extends readonly (keyof TPopulateKeys & string)[], const TFields extends Exclude<keyof TBase & string, '__typename'> = never>(
     documentId: string,
     params: { populate: TPopulate } & QueryParams<TBase, TFilters, TPopulate, TFields>,
     nextOptions?: NextOptions
-  ): Promise<SelectFields<GetPopulated<TBase, TPopulate>, TBase, TFields> | null>
+  ): Promise<SelectFields<GetPopulated<TBase, TPopulate>, TBase, TFields>>
   // Overload: general case → base return type
   findOne<const TFields extends Exclude<keyof TBase & string, '__typename'> = never>(
     documentId: string,
     params?: QueryParams<TBase, TFilters, TPopulateKeys | (keyof TPopulateKeys & string)[] | '*' | boolean, TFields>,
     nextOptions?: NextOptions
-  ): Promise<SelectFields<TBase, TBase, TFields> | null>
+  ): Promise<SelectFields<TBase, TBase, TFields>>
 
   async findOne(documentId: string, params?: any, nextOptions?: any): Promise<any> {
     const query = this.buildQueryString(params)

@@ -123,7 +123,7 @@ Strapi wraps responses in a `{ data, meta }` envelope over the wire, but the cli
 
 ```ts
 find() // Article[]
-findOne() // Article | null
+findOne() // Article (throws StrapiError 404 if it does not exist)
 create() // Article
 update() // Article
 delete() // Article | null
@@ -184,6 +184,8 @@ try {
     if (error instanceof StrapiConnectionError) {
         // Network-level failure — server unreachable, DNS error, timeout
         console.error('Cannot reach Strapi:', error.message)
+    } else if (error instanceof StrapiError && error.status === 404) {
+        // The document does not exist — Strapi answers 404, never { data: null }
     } else if (error instanceof StrapiError) {
         // Server responded with an error
         console.error(`HTTP ${error.status}:`, error.userMessage)

@@ -289,6 +289,11 @@ async function _assert() {
   const _imgs: null extends _Present<typeof pj.images> ? false : true = true
   const _cfg: null extends _Present<typeof pj.config> ? false : true = true
   void [_img, _imgList, _imgStar, _details, _banner, _imgs, _cfg]
+  // a missing document is a 404 StrapiError, so neither read resolves to null (#106, #102)
+  const fo = await client.items.findOne('id')
+  const _fo: null extends typeof fo ? false : true = true
+  const _st: null extends typeof home ? false : true = true
+  void [_fo, _st]
 }
 void _assert
 `

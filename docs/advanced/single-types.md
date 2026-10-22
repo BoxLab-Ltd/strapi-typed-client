@@ -14,7 +14,7 @@ In Strapi, a Collection Type has many entries (like blog posts or products), whi
 | `update()`  |       Yes       | Yes (no documentId needed) |
 | `delete()`  |       Yes       | Yes (no documentId needed) |
 
-A Single Type API only exposes `find()`, `update()`, and `delete()` — there is no `findOne()` (since there is only one entry) and no `create()` (the entry is created automatically by Strapi).
+A Single Type API only exposes `find()`, `update()`, and `delete()` — there is no `findOne()` (since there is only one entry) and no `create()`: the first `update()` creates the entry. Until then `find()` throws a `StrapiError` with `status: 404`, as it does when only a draft exists and the published version is requested.
 
 ## Generated Client API
 
