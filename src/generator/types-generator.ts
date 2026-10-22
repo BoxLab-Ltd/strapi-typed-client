@@ -784,14 +784,16 @@ ${perFieldPop}
         }
 
         for (const mediaField of type.media) {
-            const mediaType = mediaField.multiple ? 'MediaFile[]' : 'MediaFile'
+            const mediaType = mediaField.multiple
+                ? 'MediaFile[]'
+                : 'MediaFile | null'
             fields.push(`          ${mediaField.name}?: ${mediaType}`)
         }
 
         for (const componentField of type.components) {
-            const arraySuffix = componentField.repeatable ? '[]' : ''
+            const shapeSuffix = componentField.repeatable ? '[]' : ' | null'
             fields.push(
-                `          ${componentField.name}?: ${componentField.componentType}${arraySuffix}`,
+                `          ${componentField.name}?: ${componentField.componentType}${shapeSuffix}`,
             )
         }
 
@@ -826,16 +828,18 @@ ${perFieldPop}
         }
 
         for (const mediaField of type.media) {
-            const mediaType = mediaField.multiple ? 'MediaFile[]' : 'MediaFile'
+            const mediaType = mediaField.multiple
+                ? 'MediaFile[]'
+                : 'MediaFile | null'
             fields.push(
                 `            ${mediaField.name}?: '${mediaField.name}' extends Pop[number] ? ${mediaType} : never`,
             )
         }
 
         for (const componentField of type.components) {
-            const arraySuffix = componentField.repeatable ? '[]' : ''
+            const shapeSuffix = componentField.repeatable ? '[]' : ' | null'
             fields.push(
-                `            ${componentField.name}?: '${componentField.name}' extends Pop[number] ? ${componentField.componentType}${arraySuffix} : never`,
+                `            ${componentField.name}?: '${componentField.name}' extends Pop[number] ? ${componentField.componentType}${shapeSuffix} : never`,
             )
         }
 
@@ -880,20 +884,20 @@ ${perFieldPop}
         }
 
         for (const mediaField of type.media) {
-            const arraySuffix = mediaField.multiple ? '[]' : ''
+            const shapeSuffix = mediaField.multiple ? '[]' : ' | null'
             fields.push(
-                `          ${mediaField.name}?: '${mediaField.name}' extends keyof Pop ? _ApplyFields<MediaFile, MediaFile, Pop['${mediaField.name}']>${arraySuffix} : never`,
+                `          ${mediaField.name}?: '${mediaField.name}' extends keyof Pop ? _ApplyFields<MediaFile, MediaFile, Pop['${mediaField.name}']>${shapeSuffix} : never`,
             )
         }
 
         for (const componentField of type.components) {
             const baseType = componentField.componentType
-            const arraySuffix = componentField.repeatable ? '[]' : ''
+            const shapeSuffix = componentField.repeatable ? '[]' : ' | null'
             const hasPopulate = this.hasPopulatableFields(baseType)
 
             const resolvedType = hasPopulate
-                ? `_ApplyFields<Pop['${componentField.name}'] extends { populate: infer NestedPop } ? ${baseType}GetPayload<{ populate: NestedPop }> : ${baseType}, ${baseType}, Pop['${componentField.name}']>${arraySuffix}`
-                : `_ApplyFields<${baseType}, ${baseType}, Pop['${componentField.name}']>${arraySuffix}`
+                ? `_ApplyFields<Pop['${componentField.name}'] extends { populate: infer NestedPop } ? ${baseType}GetPayload<{ populate: NestedPop }> : ${baseType}, ${baseType}, Pop['${componentField.name}']>${shapeSuffix}`
+                : `_ApplyFields<${baseType}, ${baseType}, Pop['${componentField.name}']>${shapeSuffix}`
 
             fields.push(
                 `          ${componentField.name}?: '${componentField.name}' extends keyof Pop\n            ? ${resolvedType}\n            : never`,

@@ -273,6 +273,22 @@ async function _assert() {
   type _Feature = Extract<_Present<(typeof dz)[number]['sections']>[number], { __component: 'landing.feature' }>
   const _dz: _Same<_Present<_Feature['item']>, { count: number }> = true
   void [_toMany, _toOne, _one, _full, _nested, _comp, _dz]
+  // an empty single media or single component comes back as null once populated (#107)
+  const perField = (await client.items.find({ populate: { image: true } }))[0]!
+  const _img: _Same<_Present<typeof perField.image>, import('./types').MediaFile | null> = true
+  const listed = (await client.items.find({ populate: ['image'] }))[0]!
+  const _imgList: null extends _Present<typeof listed.image> ? true : false = true
+  const starred = (await client.items.find({ populate: '*' }))[0]!
+  const _imgStar: null extends _Present<typeof starred.image> ? true : false = true
+  const wd = (await client.widgets.find({ populate: { details: true } }))[0]!
+  const _details: null extends _Present<typeof wd.details> ? true : false = true
+  const home = await client.homepage.find({ populate: { banner: true } })
+  const _banner: null extends _Present<typeof home.banner> ? true : false = true
+  // multiple media and repeatable components stay arrays, never null
+  const pj = (await client.projects.find({ populate: { images: true, config: true } }))[0]!
+  const _imgs: null extends _Present<typeof pj.images> ? false : true = true
+  const _cfg: null extends _Present<typeof pj.config> ? false : true = true
+  void [_img, _imgList, _imgStar, _details, _banner, _imgs, _cfg]
 }
 void _assert
 `
