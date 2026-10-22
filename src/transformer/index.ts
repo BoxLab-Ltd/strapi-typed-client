@@ -25,6 +25,7 @@ export class TypeTransformer {
     ): string {
         switch (attrType.kind) {
             case 'string':
+            case 'uid':
             case 'text':
             case 'richtext':
             case 'email':

@@ -83,6 +83,7 @@ export interface AttributeConstraints {
 
 export type AttributeType =
     | { kind: 'string' }
+    | { kind: 'uid' }
     | { kind: 'text' }
     | { kind: 'richtext' }
     | { kind: 'blocks' }

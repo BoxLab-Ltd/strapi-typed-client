@@ -344,7 +344,7 @@ function mapStrapiType(attr: StrapiAttribute): AttributeType | null {
         case 'password':
             return { kind: 'password' }
         case 'uid':
-            return { kind: 'string' }
+            return { kind: 'uid' }
         case 'integer':
             return { kind: 'integer' }
         case 'biginteger':

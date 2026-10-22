@@ -328,7 +328,7 @@ export async function createArticle(input: unknown) {
 **What a schema guarantees:**
 
 - `z.input<typeof ArticleCreateInputSchema>` is exactly `ArticleCreateInput` — the two are generated from one field model and a test checks them against each other.
-- It accepts what a live Strapi 5 accepts and rejects what Strapi answers with `400`: unknown keys at every level, `required`, `min`/`max`, `minLength`/`maxLength`, `regex` (skipped for `""` on an optional field, as Strapi does), enumerations, email and `HH:mm:ss` time formats, integer and biginteger shapes, and dynamic-zone `__component` values.
+- It accepts what a live Strapi 5 accepts and rejects what Strapi answers with `400`: unknown keys at every level, `required`, `min`/`max`, `minLength`/`maxLength`, `regex` (skipped for `""` on an optional field, as Strapi does), the `uid` pattern (the attribute's `regex`, else `^[A-Za-z0-9-_.~]*$`; a `uid` gets no `""` exemption), enumerations, email and `HH:mm:ss` time formats, integer and biginteger shapes, and dynamic-zone `__component` values.
 - Where Strapi coerces (`"5"` into an integer, `"true"` into a boolean), the schema follows the TS type and expects the real type.
 - `parse()` never adds keys: schema defaults are not applied with `.default()` — Strapi applies them itself, and injecting them into an update would overwrite stored values. Use [`*Defaults`](#default-values) to seed forms.
 

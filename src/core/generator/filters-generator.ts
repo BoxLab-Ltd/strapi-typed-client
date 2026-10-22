@@ -150,6 +150,7 @@ function getFilterTypeForAttribute(attr: Attribute): string {
 
     switch (type.kind) {
         case 'string':
+        case 'uid':
         case 'text':
         case 'richtext':
         case 'email':

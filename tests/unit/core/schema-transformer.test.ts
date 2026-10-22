@@ -512,7 +512,7 @@ describe('Schema Transformer', () => {
                 writeOnly: true,
             })
             expect(attrs.find(a => a.name === 'uidField')!.type.kind).toBe(
-                'string',
+                'uid',
             )
             expect(attrs.find(a => a.name === 'integerField')!.type.kind).toBe(
                 'integer',

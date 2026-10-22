@@ -18,6 +18,7 @@ const MODES: readonly InputMode[] = ['Create', 'Update']
 const EMAIL_PATTERN = String.raw`^[^\s@]+@[^\s@]+\.[^\s@]+$`
 const TIME_PATTERN = String.raw`^\d{2}:\d{2}:\d{2}(\.\d{1,3})?$`
 const BIGINT_PATTERN = String.raw`^-?\d+$`
+const UID_PATTERN = String.raw`^[A-Za-z0-9-_.~]*$`
 
 /** Renders the pieces of a validator file; one implementation per validation library. */
 export interface ValidatorEmitter {
@@ -103,6 +104,9 @@ export const MultiMediaInputSchema = z.array(StrapiIDSchema).nullable()
                     ? matched
                     : `z.union([z.literal(''), ${matched}])`
             }
+            // Strapi re-checks a uid against its pattern without exempting "" (#108)
+            case 'uid':
+                return `${lengths('z.string()')}.regex(${regex(c.regex ?? UID_PATTERN)})`
             case 'email':
                 return `${lengths('z.string()')}.regex(${regex(EMAIL_PATTERN)})`
             case 'password':
