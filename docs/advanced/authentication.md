@@ -113,6 +113,101 @@ const strapi = new StrapiClient({
 Legacy backends are entirely unaffected: a client generated against a backend without `jwtManagement: 'refresh'` sends the same requests and headers as before — no refresh calls, no behavior change.
 :::
 
+### React Native
+
+React Native defines `window`, so the session flow runs there, but it keeps the tokens in memory only. Strapi rotates the refresh token on every refresh, and the client does not hand the new one out, so a session cannot outlive an app restart. Until pluggable token storage lands ([#97](https://github.com/BoxLab-Ltd/strapi-typed-client/issues/97)), keep the tokens yourself: switch the client to `authMode: 'legacy'`, attach the access token in `onRequest`, and store the refresh token in secure storage. This needs `sessions.httpOnly: false` on the backend, so that Strapi returns the refresh token in the response body.
+
+```typescript
+import * as SecureStore from 'expo-secure-store'
+import { StrapiClient, StrapiError } from './strapi'
+
+const BASE_URL = 'https://api.example.com'
+const KEY = 'strapi_refresh_token'
+// Face ID / fingerprint before the token is read; drop it if a prompt on every refresh is too much
+const secure = { requireAuthentication: true }
+
+let accessToken: string | undefined
+
+export const strapi = new StrapiClient({
+    baseURL: BASE_URL,
+    authMode: 'legacy',
+    onRequest: req => {
+        if (accessToken) req.headers['Authorization'] = `Bearer ${accessToken}`
+    },
+})
+
+export async function signIn(identifier: string, password: string) {
+    // Strapi rejects an expired Bearer even on the login route
+    accessToken = undefined
+    const { jwt, refreshToken } = await strapi.auth.login({
+        identifier,
+        password,
+    })
+    accessToken = jwt
+    if (refreshToken) await SecureStore.setItemAsync(KEY, refreshToken, secure)
+}
+
+let refreshing: Promise<boolean> | undefined
+
+export function refreshSession(): Promise<boolean> {
+    refreshing ??= (async () => {
+        const refreshToken = await SecureStore.getItemAsync(KEY, secure)
+        if (!refreshToken) return false
+        const res = await fetch(`${BASE_URL}/api/auth/refresh`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ refreshToken }),
+        })
+        if (!res.ok) {
+            // A 4xx ends the session; a 5xx keeps the token for the next try
+            if (res.status < 500) await SecureStore.deleteItemAsync(KEY)
+            return false
+        }
+        const data: { jwt: string; refreshToken: string } = await res.json()
+        accessToken = data.jwt
+        // The old refresh token is dead now: store the rotated one
+        await SecureStore.setItemAsync(KEY, data.refreshToken, secure)
+        return true
+    })().finally(() => {
+        refreshing = undefined
+    })
+    return refreshing
+}
+
+// Refreshes once when the access token has expired, then retries the call
+export async function withSession<T>(call: () => Promise<T>): Promise<T> {
+    try {
+        return await call()
+    } catch (error) {
+        if (
+            error instanceof StrapiError &&
+            error.status === 401 &&
+            (await refreshSession())
+        ) {
+            return call()
+        }
+        throw error
+    }
+}
+
+export async function signOut() {
+    // Revokes the session the access token belongs to
+    await strapi.auth.logout()
+    accessToken = undefined
+    await SecureStore.deleteItemAsync(KEY)
+}
+```
+
+On app start, `refreshSession()` restores the session from the stored token; wrap the calls that need a user in `withSession`:
+
+```typescript
+const isLoggedIn = await refreshSession()
+
+const me = await withSession(() => strapi.auth.me())
+```
+
+`onRequest` and these helpers live in your own code, so regenerating the client never overwrites them.
+
 ### Using Environment Variables
 
 A recommended pattern is to read the token from an environment variable:
