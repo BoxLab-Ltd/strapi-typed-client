@@ -156,6 +156,13 @@ const probe: ContentType = {
             targetType: 'Category',
             required: false,
         },
+        {
+            name: 'lead',
+            relationType: 'oneToOne',
+            target: 'api::category.category',
+            targetType: 'Category',
+            required: false,
+        },
     ],
     media: [
         { name: 'cover', multiple: false, required: false },
@@ -413,6 +420,45 @@ describe('generated Zod validators', { timeout: GENERATION_TIMEOUT }, () => {
     ] as const)('update: %s', (_name, payload, accepted) => {
         expect(v.ProbeUpdateInputSchema.safeParse(payload).success).toBe(
             accepted,
+        )
+    })
+
+    // Strapi keeps a single entry in a to-one relation and silently drops all but the last
+    // (normalizeXToOneRelationValue), so the schema rejects what would lose data. A to-many
+    // takes any list, and a bare id is shorthand for a one-element set.
+    it.each([
+        ['to-one id', { lead: 'a' }, true],
+        ['to-one reference', { lead: { documentId: 'a', locale: 'en' } }, true],
+        ['to-one null', { lead: null }, true],
+        ['to-one empty list', { lead: [] }, true],
+        ['to-one list of one', { lead: ['a'] }, true],
+        ['to-one list of two', { lead: ['a', 'b'] }, false],
+        ['to-one connect one', { lead: { connect: ['a'] } }, true],
+        ['to-one connect two', { lead: { connect: ['a', 'b'] } }, false],
+        ['to-one set one', { lead: { set: [{ id: 1 }] } }, true],
+        ['to-one set two', { lead: { set: [1, 2] } }, false],
+        [
+            'to-one disconnect several',
+            { lead: { disconnect: ['a', 'b'] } },
+            true,
+        ],
+        ['to-one unknown operation', { lead: { add: ['a'] } }, false],
+        ['to-many id', { tags: 'a' }, true],
+        ['to-many list of several', { tags: ['a', 'b', 'c'] }, true],
+        ['to-many connect several', { tags: { connect: ['a', 'b'] } }, true],
+        ['to-many set several', { tags: { set: ['a', 'b'] } }, true],
+    ] as const)('relation cardinality: %s', (_name, patch, accepted) => {
+        expect(
+            v.ProbeCreateInputSchema.safeParse({ ...ok, ...patch }).success,
+        ).toBe(accepted)
+        expect(v.ProbeUpdateInputSchema.safeParse(patch).success).toBe(accepted)
+    })
+
+    it('keeps RelationInputSchema as the any-cardinality schema', () => {
+        expect(v.RelationInputSchema.safeParse(['a', 'b']).success).toBe(true)
+        expect(v.RelationInputSchema.safeParse('a').success).toBe(true)
+        expect(v.ToOneRelationInputSchema.safeParse(['a', 'b']).success).toBe(
+            false,
         )
     })
 

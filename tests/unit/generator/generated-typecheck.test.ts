@@ -320,6 +320,43 @@ async function _assert() {
   const _fo: null extends typeof fo ? false : true = true
   const _st: null extends typeof home ? false : true = true
   void [_img, _imgList, _imgStar, _details, _banner, _imgs, _cfg, _fo, _st]
+  // relation inputs follow the cardinality of the field being written
+  // to-one (oneToOne primaryCategory, manyToOne category): at most one target
+  await client.widgets.update('id', { primaryCategory: 'doc' })
+  await client.widgets.update('id', { primaryCategory: { documentId: 'd', locale: 'en' } })
+  await client.widgets.update('id', { primaryCategory: ['doc'] })
+  await client.widgets.update('id', { primaryCategory: [] })
+  await client.widgets.update('id', { primaryCategory: null })
+  await client.widgets.update('id', { primaryCategory: { connect: ['a'], disconnect: ['b', 'c'] } })
+  await client.widgets.update('id', { primaryCategory: { set: [{ id: 1 }] } })
+  await client.items.update('id', { category: 5 })
+  // @ts-expect-error - a to-one keeps a single entry; Strapi would silently drop the first
+  await client.widgets.update('id', { primaryCategory: ['a', 'b'] })
+  // @ts-expect-error - connect on a to-one takes at most one target
+  await client.widgets.update('id', { primaryCategory: { connect: ['a', 'b'] } })
+  // @ts-expect-error - nor does set
+  await client.items.update('id', { category: { set: [1, 2] } })
+  // @ts-expect-error - a relation is never a boolean
+  await client.widgets.update('id', { primaryCategory: true })
+  // to-many (manyToMany relatedItems, oneToMany items): any list, a bare id is a one-element set
+  await client.widgets.update('id', { relatedItems: ['a', 'b', 'c'] })
+  await client.widgets.update('id', { relatedItems: 'a' })
+  await client.widgets.update('id', { relatedItems: [{ documentId: 'a' }, 2] })
+  await client.widgets.update('id', { relatedItems: { connect: ['a', 'b'], disconnect: ['c'], set: ['d'] } })
+  await client.widgets.update('id', { relatedItems: null })
+  await client.projects.update('id', { items: [1, 2] })
+  // @ts-expect-error - an unknown operation key is rejected
+  await client.widgets.update('id', { relatedItems: { add: ['a'] } })
+  // @ts-expect-error - a list entry is an id or a reference, not a nested array
+  await client.widgets.update('id', { relatedItems: [['a']] })
+  // RelationInput without a type argument stays the wide union, and its parameter is exported
+  const _anyRel: import('./types').RelationInput = ['a', 'b']
+  const _anyOne: import('./types').RelationInput = 'a'
+  const _toOneRel: import('./types').RelationInput<'manyToOne'> = ['a']
+  // @ts-expect-error - two targets do not fit a to-one
+  const _badOne: import('./types').RelationInput<'oneToOne'> = ['a', 'b']
+  const _kind: import('./types').RelationKind = 'manyToMany'
+  void [_anyRel, _anyOne, _toOneRel, _badOne, _kind]
   // write params follow what Strapi reads for the type (#105)
   await client.items.create({ title: 'x' }, { locale: 'fr', status: 'draft' })
   await client.items.update('id', {}, { locale: 'fr' }, { revalidate: 60 })

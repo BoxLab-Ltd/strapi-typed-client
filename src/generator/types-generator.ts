@@ -194,11 +194,38 @@ export interface RelationOperations {
 }
 
 /**
- * Input value for a relation field in create/update payloads.
- * Accepts an id or reference, an array of them, or the explicit { connect | disconnect | set } form.
- * Passing a plain id or array is equivalent to 'set' — it overwrites existing relations.
+ * A single relation target: an id, a documentId or a reference object.
  */
-export type RelationInput = StrapiID | RelationRef | (StrapiID | RelationRef)[] | RelationOperations | null
+export type RelationTarget = StrapiID | RelationRef
+
+/**
+ * Relation operations on a to-one field. Strapi keeps one entry in a to-one
+ * relation, so \`connect\` and \`set\` take at most one target.
+ */
+export interface ToOneRelationOperations {
+  connect?: [] | [RelationTarget] | undefined
+  disconnect?: RelationTarget[] | undefined
+  set?: [] | [RelationTarget] | undefined
+}
+
+/**
+ * Cardinality of a relation field, as seen from the field being written.
+ * \`oneToMany\` and \`manyToOne\` are opposite sides of the same relationship, so the
+ * input type follows the kind of the field itself, not of the relationship.
+ */
+export type RelationKind = 'oneToOne' | 'oneToMany' | 'manyToOne' | 'manyToMany'
+
+/**
+ * Input value for a relation field in create/update payloads, shaped by its cardinality:
+ * - to-one (\`oneToOne\`, \`manyToOne\`): one id or reference, at most one in a list or in connect/set, or null to clear.
+ *   Strapi silently keeps only the last entry when a to-one gets more than one, so the types reject that.
+ * - to-many (\`oneToMany\`, \`manyToMany\`): an id or reference (shorthand for a one-element set), an array of them, the explicit { connect | disconnect | set } form, or null to clear.
+ * Passing a plain id or array is equivalent to 'set' — it overwrites existing relations.
+ * Without a type argument it accepts every shape, for hand-written helpers that handle any relation.
+ */
+export type RelationInput<K extends RelationKind = RelationKind> = K extends 'oneToOne' | 'manyToOne'
+  ? RelationTarget | [] | [RelationTarget] | ToOneRelationOperations | null
+  : RelationTarget | RelationTarget[] | RelationOperations | null
 
 /**
  * Input value for a single media file field. Accepts a documentId (string) or
@@ -538,7 +565,7 @@ type _ApplyFields<TFull, TBase, TEntry> = TEntry extends true ? TFull : TEntry e
             case 'media':
                 return field.multiple ? 'MultiMediaInput' : 'MediaInput'
             case 'relation':
-                return 'RelationInput'
+                return `RelationInput<'${field.relationType}'>`
             case 'component': {
                 const inner = `${field.componentType}${mode}Input`
                 if (field.repeatable) return `${inner}[]`

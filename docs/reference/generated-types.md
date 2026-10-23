@@ -68,7 +68,7 @@ export interface ArticleCreateInput {
     slug?: string | null
     status?: 'draft' | 'published' | 'archived' | null
     views?: string | number | null // biginteger
-    category?: RelationInput // id, documentId, reference object, array, or { connect | disconnect | set }
+    category?: RelationInput<'manyToOne'> // one id or reference, at most one in a list, or { connect | disconnect | set }
     cover?: MediaInput // media -> ID
     gallery?: MultiMediaInput // multiple media -> ID array
     seo?: SeoCreateInput | null // single component

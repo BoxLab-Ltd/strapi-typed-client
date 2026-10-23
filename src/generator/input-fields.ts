@@ -3,6 +3,7 @@ import type {
     Component,
     ContentType,
     ParsedSchema,
+    Relation,
 } from '../schema-types.js'
 
 export type InputMode = 'Create' | 'Update'
@@ -12,7 +13,7 @@ export type InputField = { name: string; optional: boolean } & (
     | { kind: 'id' }
     | { kind: 'attribute'; attr: Attribute; nullable: boolean }
     | { kind: 'media'; multiple: boolean }
-    | { kind: 'relation' }
+    | { kind: 'relation'; relationType: Relation['relationType'] }
     | {
           kind: 'component'
           componentType: string
@@ -58,7 +59,12 @@ export function inputFields(
     // Strapi-managed relations (the creator fields) are readable but never writable
     for (const rel of type.relations) {
         if (rel.readOnly) continue
-        fields.push({ name: rel.name, optional: true, kind: 'relation' })
+        fields.push({
+            name: rel.name,
+            optional: true,
+            kind: 'relation',
+            relationType: rel.relationType,
+        })
     }
     // Strapi rejects null for repeatable components and dynamic zones, and
     // enforces `required` on a single component (unlike relations/media).

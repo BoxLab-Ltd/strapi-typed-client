@@ -132,6 +132,44 @@ describe('Schema Transformer', () => {
             expect(result.contentTypes[0].kind).toBe('single')
         })
 
+        // Input types follow relation cardinality, so a many-sided relation must never
+        // fall into the single-valued default (Strapi also names unidirectional and polymorphic kinds)
+        it.each([
+            ['oneWay', 'oneToOne'],
+            ['manyWay', 'manyToMany'],
+            ['morphOne', 'oneToOne'],
+            ['morphToOne', 'oneToOne'],
+            ['morphMany', 'manyToMany'],
+            ['morphToMany', 'manyToMany'],
+        ] as const)('maps the %s relation to %s', (relation, expected) => {
+            const extracted: ExtractedSchema = {
+                contentTypes: {
+                    'api::post.post': {
+                        uid: 'api::post.post',
+                        kind: 'collectionType',
+                        collectionName: 'posts',
+                        info: {
+                            singularName: 'post',
+                            pluralName: 'posts',
+                            displayName: 'Post',
+                        },
+                        attributes: {
+                            rel: {
+                                type: 'relation',
+                                relation,
+                                target: 'api::category.category',
+                            },
+                        },
+                    },
+                },
+                components: {},
+            }
+            expect(
+                transformSchema(extracted).contentTypes[0].relations[0]
+                    .relationType,
+            ).toBe(expected)
+        })
+
         it('should transform relations', () => {
             const extracted: ExtractedSchema = {
                 contentTypes: {
