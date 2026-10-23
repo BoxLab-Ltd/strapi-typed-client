@@ -385,12 +385,18 @@ function normalizeRelationType(
 
     switch (normalized) {
         case 'onetoone':
+        case 'oneway':
+        case 'morphtoone':
+        case 'morphone':
             return 'oneToOne'
         case 'onetomany':
             return 'oneToMany'
         case 'manytoone':
             return 'manyToOne'
         case 'manytomany':
+        case 'manyway':
+        case 'morphtomany':
+        case 'morphmany':
             return 'manyToMany'
         default:
             // Default to manyToOne for unknown relation types

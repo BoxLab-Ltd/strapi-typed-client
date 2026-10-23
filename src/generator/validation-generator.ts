@@ -66,6 +66,7 @@ export const RelationRefSchema = z.strictObject({
 
 const RelationTargetSchema = z.union([StrapiIDSchema, RelationRefSchema])
 
+// Any cardinality, and the to-many fields: RelationInput / RelationInput<'oneToMany' | 'manyToMany'>
 export const RelationInputSchema = z.union([
   StrapiIDSchema,
   RelationRefSchema,
@@ -74,6 +75,22 @@ export const RelationInputSchema = z.union([
     connect: z.array(RelationTargetSchema).optional(),
     disconnect: z.array(RelationTargetSchema).optional(),
     set: z.array(RelationTargetSchema).optional(),
+  }),
+  z.null(),
+])
+
+// RelationInput<'oneToOne' | 'manyToOne'>: Strapi keeps one entry in a to-one relation and
+// silently drops all but the last, so a list, connect or set holds at most one target
+const ToOneTargetListSchema = z.union([z.tuple([]), z.tuple([RelationTargetSchema])])
+
+export const ToOneRelationInputSchema = z.union([
+  StrapiIDSchema,
+  RelationRefSchema,
+  ToOneTargetListSchema,
+  z.strictObject({
+    connect: ToOneTargetListSchema.optional(),
+    disconnect: z.array(RelationTargetSchema).optional(),
+    set: ToOneTargetListSchema.optional(),
   }),
   z.null(),
 ])
@@ -157,7 +174,11 @@ export const MultiMediaInputSchema = z.array(StrapiIDSchema).nullable()
                     : 'MediaInputSchema'
                 break
             case 'relation':
-                schema = 'RelationInputSchema'
+                schema =
+                    field.relationType === 'oneToOne' ||
+                    field.relationType === 'manyToOne'
+                        ? 'ToOneRelationInputSchema'
+                        : 'RelationInputSchema'
                 break
             case 'component': {
                 const inner = `${field.componentType}${mode}InputSchema`

@@ -281,10 +281,27 @@ describe('TypesGenerator', () => {
             expect(output).toContain('set?: (StrapiID | RelationRef)[]')
         })
 
-        it('should generate RelationInput union with scalar, array, and operations forms', () => {
+        it('should generate RelationInput shaped by relation kind, wide without a type argument', () => {
             expect(output).toContain(
-                'export type RelationInput = StrapiID | RelationRef | (StrapiID | RelationRef)[] | RelationOperations | null',
+                "export type RelationKind = 'oneToOne' | 'oneToMany' | 'manyToOne' | 'manyToMany'",
             )
+            expect(output).toContain(
+                "export type RelationInput<K extends RelationKind = RelationKind> = K extends 'oneToOne' | 'manyToOne'",
+            )
+            // to-one: one target, at most one in a list; to-many: scalar shorthand or any list
+            expect(output).toContain(
+                'RelationTarget | [] | [RelationTarget] | ToOneRelationOperations | null',
+            )
+            expect(output).toContain(
+                'RelationTarget | RelationTarget[] | RelationOperations | null',
+            )
+            expect(output).toContain(
+                'export interface ToOneRelationOperations {',
+            )
+            expect(output).toContain(
+                'connect?: [] | [RelationTarget] | undefined',
+            )
+            expect(output).toContain('set?: [] | [RelationTarget] | undefined')
         })
 
         it('should generate MediaInput and MultiMediaInput aliases', () => {
@@ -387,7 +404,7 @@ describe('TypesGenerator', () => {
             expect(output).toContain('  title: string') // required
             expect(output).toContain('  price?: number | null') // optional scalar
             expect(output).toContain('  image?: MediaInput')
-            expect(output).toContain('  category?: RelationInput')
+            expect(output).toContain("  category?: RelationInput<'manyToOne'>")
             expect(output).toContain('export interface ItemUpdateInput {')
             expect(output).toContain('  title?: string') // partial in Update
         })
@@ -395,8 +412,8 @@ describe('TypesGenerator', () => {
         it('ProjectInput: multi-media, relations, and component field uses the matching variant', () => {
             expect(output).toContain('export interface ProjectCreateInput {')
             expect(output).toContain('  images?: MultiMediaInput')
-            expect(output).toContain('  items?: RelationInput')
-            expect(output).toContain('  owner?: RelationInput')
+            expect(output).toContain("  items?: RelationInput<'oneToMany'>")
+            expect(output).toContain("  owner?: RelationInput<'manyToOne'>")
             expect(output).toContain(
                 '  config?: ProjectConfigCreateInput[] | undefined;',
             )
@@ -917,7 +934,10 @@ describe('TypesGenerator', () => {
         it('accepts every relation reference form Strapi does', () => {
             expect(out).toContain('export interface RelationRef {')
             expect(out).toContain(
-                'export type RelationInput = StrapiID | RelationRef | (StrapiID | RelationRef)[] | RelationOperations | null',
+                'export type RelationInput<K extends RelationKind = RelationKind>',
+            )
+            expect(out).toContain(
+                'export type RelationTarget = StrapiID | RelationRef',
             )
         })
     })

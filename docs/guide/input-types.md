@@ -28,8 +28,8 @@ When you write data, you use the input types — `ArticleCreateInput` for `creat
 {
   title: string                   // required in the schema
   content?: string | null
-  category?: RelationInput        // relation — id, documentId, reference object, array, or { connect | disconnect | set }
-  tags?: RelationInput            // relation (any cardinality)
+  category?: RelationInput<'manyToOne'>  // relation — one id or reference, at most one in a list, or { connect | disconnect | set }
+  tags?: RelationInput<'manyToMany'>     // relation — ids, references, or { connect | disconnect | set }
   coverImage?: MediaInput         // media — file id
 }
 ```
@@ -54,7 +54,7 @@ Keys Strapi does not know — including `id`, `documentId`, `createdAt` or `crea
 
 ## Relations
 
-In input types, every relation — regardless of cardinality — is typed as `RelationInput`:
+In input types, each relation is typed `RelationInput<Kind>`, where the kind is the cardinality of the field you are writing (`oneToMany` and `manyToOne` are opposite sides of one relationship, so each field follows its own side):
 
 ```ts
 type StrapiID = string | number
@@ -67,24 +67,39 @@ type RelationRef = {
     position?: { before?: StrapiID; after?: StrapiID; start?: true; end?: true }
 }
 
-type RelationInput =
-    | StrapiID // a single id or documentId
-    | RelationRef // a single reference object
-    | (StrapiID | RelationRef)[] // an array of either
-    | {
-          connect?: (StrapiID | RelationRef)[]
-          disconnect?: (StrapiID | RelationRef)[]
-          set?: (StrapiID | RelationRef)[]
-      }
-    | null
+type RelationTarget = StrapiID | RelationRef
+
+type RelationInput<K extends RelationKind = RelationKind> = K extends
+    'oneToOne' | 'manyToOne'
+    ? | RelationTarget // one id or reference
+      | [] // clear it
+      | [RelationTarget] // at most one in a list
+      | {
+            connect?: [] | [RelationTarget] // at most one
+            disconnect?: RelationTarget[]
+            set?: [] | [RelationTarget] // at most one
+        }
+      | null
+    : | RelationTarget // shorthand for a one-element set
+      | RelationTarget[] // any number of ids or references
+      | {
+            connect?: RelationTarget[]
+            disconnect?: RelationTarget[]
+            set?: RelationTarget[]
+        }
+      | null
 ```
 
-| Relation Type | Input Type      |
-| ------------- | --------------- |
-| One-to-one    | `RelationInput` |
-| Many-to-one   | `RelationInput` |
-| One-to-many   | `RelationInput` |
-| Many-to-many  | `RelationInput` |
+| Relation Type | Input Type                    |
+| ------------- | ----------------------------- |
+| One-to-one    | `RelationInput<'oneToOne'>`   |
+| Many-to-one   | `RelationInput<'manyToOne'>`  |
+| One-to-many   | `RelationInput<'oneToMany'>`  |
+| Many-to-many  | `RelationInput<'manyToMany'>` |
+
+The one thing the kind changes is the **to-one limit**: a to-one relation holds a single entry, and Strapi quietly keeps only the last one when it is sent several (`category: ['a', 'b']` links `b` and drops `a` without an error). The input types and the Zod validators reject that, so the mistake shows up at compile time instead of as lost data. To-many fields take any number of targets, plus a bare id as a one-element `set`, because Strapi accepts both.
+
+`RelationInput` without a type argument is the union of both and accepts every shape, which is what you want in a hand-written helper that handles any relation. The kinds come from your schema: `oneWay` and the `morph*` relation names map to the matching to-one or to-many kind.
 
 A plain id or array is shorthand for `set` — it overwrites the existing relations. Use the explicit `{ connect | disconnect | set }` form for fine-grained updates.
 
@@ -314,13 +329,13 @@ export async function createArticle(input: unknown) {
 }
 ```
 
-| Export                                                      | Validates                                |
-| ----------------------------------------------------------- | ---------------------------------------- |
-| `ArticleCreateInputSchema`                                  | `ArticleCreateInput`                     |
-| `ArticleUpdateInputSchema`                                  | `ArticleUpdateInput`                     |
-| `SeoCreateInputSchema`, …                                   | component inputs                         |
-| `HeroSectionDzCreateInputSchema`, …                         | dynamic-zone blocks (with `__component`) |
-| `RelationInputSchema`, `MediaInputSchema`, `StrapiIDSchema` | shared building blocks                   |
+| Export                                                                                  | Validates                                |
+| --------------------------------------------------------------------------------------- | ---------------------------------------- |
+| `ArticleCreateInputSchema`                                                              | `ArticleCreateInput`                     |
+| `ArticleUpdateInputSchema`                                                              | `ArticleUpdateInput`                     |
+| `SeoCreateInputSchema`, …                                                               | component inputs                         |
+| `HeroSectionDzCreateInputSchema`, …                                                     | dynamic-zone blocks (with `__component`) |
+| `RelationInputSchema`, `ToOneRelationInputSchema`, `MediaInputSchema`, `StrapiIDSchema` | shared building blocks                   |
 
 **What a schema guarantees:**
 
