@@ -481,6 +481,74 @@ export class ClientGenerator {
             ],
         })
 
+        // Session persistence types (refresh mode)
+        sf.addInterface({
+            name: 'StrapiTokenStorage',
+            isExported: true,
+            docs: [
+                'Where the session flow keeps the refresh token between app launches (e.g. `expo-secure-store`, `react-native-keychain`). Every method may be sync or async. Only the refresh token is stored; the short-lived access token stays in memory.\n' +
+                    'The token is read lazily, only when a refresh or `auth.logout()` needs it, so a biometric prompt inside `getRefreshToken` fires at that moment. A rejected or cancelled read is treated as "no token available right now": nothing is cleared and the session is not marked dead.',
+            ],
+            properties: [
+                {
+                    name: 'getRefreshToken',
+                    type: '() => string | null | undefined | Promise<string | null | undefined>',
+                },
+                {
+                    name: 'setRefreshToken',
+                    type: '(token: string) => void | Promise<void>',
+                    docs: [
+                        'Called after a login and after every token rotation. Strapi rotates the refresh token on each refresh, so the previous one is dead once this is called.',
+                    ],
+                },
+                {
+                    name: 'clearRefreshToken',
+                    type: '() => void | Promise<void>',
+                    docs: [
+                        'Called on `auth.clearToken()` / `auth.logout()` and when the server definitively rejects the session.',
+                    ],
+                },
+            ],
+        })
+
+        sf.addInterface({
+            name: 'StrapiSessionTokens',
+            isExported: true,
+            docs: ['The tokens handed to `onTokenRefreshed`.'],
+            properties: [
+                { name: 'accessToken', type: 'string' },
+                {
+                    name: 'refreshToken',
+                    type: 'string',
+                    hasQuestionToken: true,
+                    docs: [
+                        'The rotated refresh token. Absent when the backend keeps it in an httpOnly cookie.',
+                    ],
+                },
+            ],
+        })
+
+        sf.addInterface({
+            name: 'StrapiSessionExpiredInfo',
+            isExported: true,
+            docs: ['Passed to `onSessionExpired`.'],
+            properties: [
+                {
+                    name: 'reason',
+                    type: "'refresh-rejected' | 'invalid-response'",
+                    docs: [
+                        "'refresh-rejected': the server answered the refresh with a 4xx. 'invalid-response': it answered 2xx without a jwt.",
+                    ],
+                },
+                {
+                    name: 'status',
+                    type: 'number',
+                    hasQuestionToken: true,
+                    docs: ['HTTP status of the refresh response.'],
+                },
+            ],
+        })
+
         // StrapiClientConfig interface
         sf.addInterface({
             name: 'StrapiClientConfig',
@@ -515,7 +583,31 @@ export class ClientGenerator {
                     type: "'legacy' | 'refresh'",
                     hasQuestionToken: true,
                     docs: [
-                        "Override the users-permissions JWT mode baked in at generation time (see the exported AUTH_MODE const). 'refresh' enables the session flow: in-memory access token, `Authorization: Bearer` on every request, and an automatic single-flight refresh + retry on 401 (expired token) or an anonymous 403 (Strapi answers ForbiddenError, not 401, when a protected route is hit with no credentials — the page-reload bootstrap case). Browser-only — in Node the session flow is inert (use API tokens server-side). Set `credentials: 'include'` alongside it when the refresh token lives in an httpOnly cookie.",
+                        "Override the users-permissions JWT mode baked in at generation time (see the exported AUTH_MODE const). 'refresh' enables the session flow: in-memory access token, `Authorization: Bearer` on every request, and an automatic single-flight refresh + retry on 401 (expired token) or an anonymous 403 (Strapi answers ForbiddenError, not 401, when a protected route is hit with no credentials — the page-reload bootstrap case). Browser-only unless `tokenStorage` is provided — in Node the session flow is otherwise inert (use API tokens server-side). Set `credentials: 'include'` alongside it when the refresh token lives in an httpOnly cookie.",
+                    ],
+                },
+                {
+                    name: 'tokenStorage',
+                    type: 'StrapiTokenStorage',
+                    hasQuestionToken: true,
+                    docs: [
+                        'Persist the refresh token across app launches (refresh mode only; needs `sessions.httpOnly: false` on the backend so the token is in the response body). Pass the storage of ONE user per client instance. Providing it also switches the session flow on outside a browser (e.g. React Native without `window`, or a Node worker that owns its storage). On start call `auth.refresh()` to restore the session from storage.',
+                    ],
+                },
+                {
+                    name: 'onTokenRefreshed',
+                    type: '(tokens: StrapiSessionTokens) => void | Promise<void>',
+                    hasQuestionToken: true,
+                    docs: [
+                        'Called after a successful refresh, once the rotated refresh token has been stored. Errors thrown here are swallowed (shown with `debug`) and never fail the request.',
+                    ],
+                },
+                {
+                    name: 'onSessionExpired',
+                    type: '(info: StrapiSessionExpiredInfo) => void | Promise<void>',
+                    hasQuestionToken: true,
+                    docs: [
+                        'Called when the server definitively rejects the session (refresh answered 4xx, or 2xx without a jwt): the stored token is already cleared, so route the user to sign-in. Not called for transient failures (5xx, network, a cancelled biometric prompt) or for an explicit `auth.logout()` / `clearToken()`. Errors thrown here are swallowed.',
                     ],
                 },
                 {
@@ -846,6 +938,10 @@ interface _AuthSessionState {
   // not resurrect a logged-out session, and a late 4xx must not wipe a
   // fresh login.
   epoch: number
+  // Tail of the serialized tokenStorage operations (writes, clears and the
+  // lazy read all queue here, so a slow write can never overtake a clear and
+  // resurrect a signed-out session). It never rejects.
+  storageQueue?: Promise<void>
 }
 
 const authSessionStore = new WeakMap<StrapiClientConfig, _AuthSessionState>()
@@ -894,25 +990,96 @@ class BaseAPI {
 
   /**
    * The automatic session flow (token capture, Bearer injection, refresh on
-   * 401) is active only in refresh mode AND in a browser. In Node the whole
-   * mechanism is inert: there is no cookie jar for a cookie-based refresh,
-   * and silently storing tokens on a client instance that may be shared
-   * across requests (e.g. a Next.js module singleton) would leak one user's
-   * session into another user's requests. Server-side code should use API
-   * tokens (\`token\`) or explicit \`setToken\`.
+   * 401) is active only in refresh mode AND in a browser-like runtime (or
+   * when the caller passes a \`tokenStorage\`). In plain Node the whole
+   * mechanism is otherwise inert: there is no cookie jar for a cookie-based
+   * refresh, and silently storing tokens on a client instance that may be
+   * shared across requests (e.g. a Next.js module singleton) would leak one
+   * user's session into another user's requests. Server-side code should use
+   * API tokens (\`token\`) or explicit \`setToken\`. A \`tokenStorage\` is an
+   * explicit opt-in: the caller owns where the session lives and promises
+   * the client instance belongs to one user (an app, not a shared server).
    */
   protected _sessionEnabled(): boolean {
     return (
       this._authMode() === 'refresh' &&
-      typeof (globalThis as { window?: unknown }).window !== 'undefined'
+      (typeof (globalThis as { window?: unknown }).window !== 'undefined' ||
+        this.config.tokenStorage !== undefined)
     )
+  }
+
+  // Run a user hook; a throwing hook must never break a request or a refresh.
+  protected async _notify<A>(
+    hook: ((arg: A) => void | Promise<void>) | undefined,
+    arg: A
+  ): Promise<void> {
+    if (!hook) return
+    try {
+      await hook(arg)
+    } catch (err) {
+      if (this.config.debug) console.warn('[Strapi Auth] session hook threw', err)
+    }
+  }
+
+  // Queue a tokenStorage operation behind the earlier ones. Never rejects:
+  // a failing store must not fail a login, a refresh or a sign-out.
+  private _queueStorage(session: _AuthSessionState, task: () => void | Promise<void>): Promise<void> {
+    const run = (session.storageQueue ?? Promise.resolve())
+      .then(task)
+      .catch(err => {
+        if (this.config.debug) console.warn('[Strapi Auth] tokenStorage failed', err)
+      })
+    session.storageQueue = run
+    return run
+  }
+
+  // Persist a refresh token unless the session changed hands (login or
+  // sign-out bumped the epoch) before the queued write got its turn.
+  private _persistRefreshToken(session: _AuthSessionState, token: string, epoch: number): Promise<void> {
+    const storage = this.config.tokenStorage
+    if (!storage) return Promise.resolve()
+    return this._queueStorage(session, async () => {
+      if (session.epoch !== epoch) return
+      await storage.setRefreshToken(token)
+    })
+  }
+
+  protected _clearStoredRefreshToken(session: _AuthSessionState): Promise<void> {
+    const storage = this.config.tokenStorage
+    if (!storage) return Promise.resolve()
+    return this._queueStorage(session, () => storage.clearRefreshToken())
+  }
+
+  /**
+   * Make the refresh token available in memory, reading \`tokenStorage\` the
+   * first time it is needed (this is where a biometric prompt fires). The
+   * token is then cached for the life of the session. A failed or cancelled
+   * read yields undefined and changes no state.
+   */
+  protected async _loadRefreshToken(session: _AuthSessionState): Promise<string | undefined> {
+    if (session.refreshToken) return session.refreshToken
+    const storage = this.config.tokenStorage
+    if (!storage || !this._sessionEnabled()) return undefined
+    const epoch = session.epoch
+    try {
+      // Behind any queued write, so the read can't see a token about to be replaced
+      await session.storageQueue
+      const token = await storage.getRefreshToken()
+      if (session.epoch !== epoch) return session.refreshToken
+      if (token) session.refreshToken = token
+      return token || undefined
+    } catch (err) {
+      if (this.config.debug) console.warn('[Strapi Auth] tokenStorage read failed', err)
+      return undefined
+    }
   }
 
   /**
    * Store the session tokens from an auth response ({ jwt, refreshToken? }).
-   * No-op in legacy mode and outside the browser (see _sessionEnabled).
+   * No-op in legacy mode and in a runtime without a session (see
+   * _sessionEnabled). Resolves once the refresh token is persisted.
    */
-  protected _captureSession<T>(res: T): T {
+  protected async _captureSession<T>(res: T): Promise<T> {
     if (!this._sessionEnabled()) return res
     const auth = res as { jwt?: unknown; refreshToken?: unknown } | null | undefined
     if (auth && typeof auth.jwt === 'string') {
@@ -925,6 +1092,9 @@ class BaseAPI {
       // invalidate any refresh still in flight (its outcome is stale now).
       session.dead = undefined
       session.epoch++
+      if (typeof auth.refreshToken === 'string') {
+        await this._persistRefreshToken(session, auth.refreshToken, session.epoch)
+      }
     }
     return res
   }
@@ -955,6 +1125,15 @@ class BaseAPI {
     // client must never store one caller's rotated token for the next caller.
     const persist = this._sessionEnabled()
     try {
+      // Cold start: the refresh token lives in tokenStorage, not in memory yet.
+      // Single-flight (we are inside the shared refresh promise), so concurrent
+      // 401s trigger one biometric prompt, not many. No token means there is no
+      // session to resume — answer false without a pointless round trip.
+      if (persist && this.config.tokenStorage && !session.refreshToken) {
+        await this._loadRefreshToken(session)
+        if (session.epoch !== epoch) return !!session.accessToken
+        if (!session.refreshToken) return false
+      }
       // Raw fetch, not this.request() — a 401 here must not recurse into
       // another refresh, and no Authorization is attached (Strapi rejects
       // requests carrying an invalid Bearer even on public routes). The
@@ -996,6 +1175,11 @@ class BaseAPI {
           session.accessToken = undefined
           session.refreshToken = undefined
           session.dead = true
+          await this._clearStoredRefreshToken(session)
+          await this._notify(this.config.onSessionExpired, {
+            reason: 'refresh-rejected',
+            status: response.status,
+          })
         }
         return false
       }
@@ -1009,15 +1193,33 @@ class BaseAPI {
         if (persist) {
           session.accessToken = undefined
           session.dead = true
+          await this._clearStoredRefreshToken(session)
+          await this._notify(this.config.onSessionExpired, {
+            reason: 'invalid-response',
+            status: response.status,
+          })
         }
         return false
       }
       if (persist) {
+        // Memory first, synchronously: a request issued while the storage
+        // write is pending already sees the new access token.
         session.accessToken = data.jwt
         if (data.refreshToken) {
           session.refreshToken = data.refreshToken
         }
         session.dead = undefined
+        // The old refresh token is dead server-side now. Wait for the
+        // rotated one to be stored before reporting success, so an app kill
+        // right after cannot strand the user with a token that no longer works.
+        if (data.refreshToken) {
+          await this._persistRefreshToken(session, data.refreshToken, epoch)
+        }
+        if (session.epoch !== epoch) return !!session.accessToken
+        await this._notify(this.config.onTokenRefreshed, {
+          accessToken: data.jwt,
+          ...(data.refreshToken && { refreshToken: data.refreshToken }),
+        })
       }
       return true
     } catch {
