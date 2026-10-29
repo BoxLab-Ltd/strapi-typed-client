@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { isGeneratedOutputFresh } from '../../../src/cli/commands/generate.js'
+import {
+    isGeneratedOutputFresh,
+    generatedFileNames,
+} from '../../../src/cli/commands/generate.js'
 
 describe('isGeneratedOutputFresh', () => {
     const base = {
@@ -31,5 +34,30 @@ describe('isGeneratedOutputFresh', () => {
         expect(isGeneratedOutputFresh({ ...base, allFilesExist: false })).toBe(
             false,
         )
+    })
+
+    it('is stale when the types layout changes', () => {
+        expect(
+            isGeneratedOutputFresh({
+                ...base,
+                localSplitTypes: false,
+                splitTypes: true,
+            }),
+        ).toBe(false)
+        expect(
+            isGeneratedOutputFresh({
+                ...base,
+                localSplitTypes: true,
+                splitTypes: true,
+            }),
+        ).toBe(true)
+    })
+})
+
+describe('generatedFileNames', () => {
+    it('lists the fixed base file for split types', () => {
+        expect(generatedFileNames('ts', 'none', true)).toContain('base.ts')
+        expect(generatedFileNames('js', 'none', true)).toContain('base.d.ts')
+        expect(generatedFileNames('ts', 'none')).not.toContain('base.ts')
     })
 })

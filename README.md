@@ -79,6 +79,10 @@ articles[0].category.name // fully typed
 - Schema hashing — skips regeneration when nothing changed
 - Framework-agnostic — works with any TypeScript project
 
+## Split types for large schemas
+
+`--split-types` writes one types file per collection and component category (`base.ts`, `collections/*.ts`) behind the same `types` barrel, so existing imports keep working while editor performance, diffs and CODEOWNERS get finer-grained. See [Generated types](https://boxlab-ltd.github.io/strapi-typed-client/reference/generated-types#split-types).
+
 ## Runtime validation (Zod)
 
 Add `--validation zod` and the generator also writes `validation.ts`: a [Zod 4](https://zod.dev) schema for every create/update input, generated from the same model as the TS types, so the two can't drift. Install `zod` in your app first:
