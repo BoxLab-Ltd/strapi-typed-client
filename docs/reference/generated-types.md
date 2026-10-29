@@ -26,6 +26,25 @@ src/strapi/
   validation.d.ts
 ```
 
+## Split types
+
+On a large schema `types` grows to thousands of lines. Pass `--split-types` (or `splitTypes: true` in [`withStrapiTypes`](/guide/nextjs)) to spread it over one file per content type and one per component category:
+
+```
+src/strapi/
+  types.ts                      # barrel: re-exports everything below
+  base.ts                       # shared primitives, filter operators, query helpers
+  collections/
+    article.ts                  # Article, ArticleCreateInput, ArticleFilters, ArticlePopulateParam, ArticleGetPayload, ...
+    category.ts
+    components/
+      shared.ts                 # components of the `shared` category
+  client.ts
+  index.ts
+```
+
+`types` stays a barrel, so `import { Article } from './strapi/types'` and `from './strapi'` keep working; import from `collections/article` directly if you want the language server to load only that file. Later runs keep the layout, `--single-file` goes back, and files of removed collections are deleted (only files carrying the generated header — your own files are left alone). Unchanged files are not rewritten, so a schema change touches only the files it affects and diffs and CODEOWNERS rules can follow collections.
+
 ## Type Categories
 
 The generator produces three categories of types for each content type, plus supporting utility types.

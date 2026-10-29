@@ -13,6 +13,7 @@ import { createRequire } from 'module'
 import * as path from 'path'
 import {
     detectOutputFormat,
+    isSplitTypesOutput,
     readClientHeaderConst,
     readValidationMode,
     validationFileNames,
@@ -29,6 +30,8 @@ export interface StrapiTypesConfig {
     typecheck?: boolean
     /** Also generate Zod validators (`validation.ts`); needs zod 4 installed. Defaults to the mode already in `output`. */
     validation?: ValidationMode
+    /** One types file per collection and component category (`base.ts` + `collections/`). Defaults to the layout already in `output`. */
+    splitTypes?: boolean
 }
 
 const _require = createRequire(import.meta.url)
@@ -59,11 +62,13 @@ function generatedFilesExist(
     outputDir: string,
     format: 'js' | 'ts',
     validation: ValidationMode,
+    splitTypes: boolean,
 ): boolean {
     const files = [
         ...(format === 'ts'
             ? ['types.ts', 'client.ts', 'index.ts']
             : ['types.d.ts', 'client.d.ts', 'index.d.ts']),
+        ...(splitTypes ? [format === 'ts' ? 'base.ts' : 'base.d.ts'] : []),
         ...(validation === 'zod' ? validationFileNames(format) : []),
     ]
     return files.every(f => fs.existsSync(path.join(outputDir, f)))
@@ -107,6 +112,8 @@ async function startDevWatch(config: StrapiTypesConfig): Promise<void> {
         config.format ?? detectOutputFormat(outputDir) ?? 'js'
     const localValidation = readValidationMode(outputDir)
     const validation = config.validation ?? localValidation ?? 'none'
+    const localSplitTypes = isSplitTypesOutput(outputDir)
+    const splitTypes = config.splitTypes ?? localSplitTypes
     const silent = config.silent ?? false
     const url =
         config.strapiUrl || process.env.STRAPI_URL || 'http://localhost:1337'
@@ -140,7 +147,8 @@ async function startDevWatch(config: StrapiTypesConfig): Promise<void> {
     let lastHash =
         !versionStale &&
         !validationChanged &&
-        generatedFilesExist(outputDir, format, validation)
+        localSplitTypes === splitTypes &&
+        generatedFilesExist(outputDir, format, validation, splitTypes)
             ? readClientHeaderConst(outputDir, 'SCHEMA_HASH')
             : null
     let generating = false
@@ -158,7 +166,12 @@ async function startDevWatch(config: StrapiTypesConfig): Promise<void> {
 
                 if (
                     lastHash !== remoteHash ||
-                    !generatedFilesExist(outputDir, format, validation)
+                    !generatedFilesExist(
+                        outputDir,
+                        format,
+                        validation,
+                        splitTypes,
+                    )
                 ) {
                     generating = true
                     const stop = loading(silent, 'Regenerating types')
@@ -173,6 +186,7 @@ async function startDevWatch(config: StrapiTypesConfig): Promise<void> {
                         format,
                         typecheck: config.typecheck,
                         validation,
+                        splitTypes,
                     })
 
                     stop()
@@ -231,6 +245,11 @@ function runBuildGenerate(config: StrapiTypesConfig): void {
         '--validation',
         validation,
     ]
+
+    // Left out when unset, so the CLI keeps whatever layout `output` already has
+    if (config.splitTypes !== undefined) {
+        args.push(config.splitTypes ? '--split-types' : '--single-file')
+    }
 
     if (config.typecheck === false) {
         args.push('--no-typecheck')

@@ -1,6 +1,9 @@
+import * as path from 'path'
 import {
     Project,
     SourceFile,
+    SyntaxKind,
+    Node,
     OptionalKind,
     PropertySignatureStructure,
 } from 'ts-morph'
@@ -12,6 +15,8 @@ import {
 } from '../schema-types.js'
 import { TypeTransformer } from '../transformer/index.js'
 import { buildConstraintDocs } from './constraint-docs.js'
+import { toKebabCase } from '../shared/string-utils.js'
+import { SPLIT_TYPES_MARKER } from '../shared/client-header.js'
 import {
     dzComponentUids as collectDzComponentUids,
     inputFields,
@@ -30,6 +35,20 @@ function safeKey(name: string): string {
     return /^[A-Za-z_$][\w$]*$/.test(name) ? name : JSON.stringify(name)
 }
 
+const TYPES_HEADER = [
+    '/* eslint-disable */',
+    '// Auto-generated TypeScript types from Strapi schema',
+    '// Do not edit manually',
+]
+
+// Where each kind of declaration lands: one file in single mode, spread in split mode
+interface TypeSinks {
+    base: SourceFile
+    contentType: (ct: ContentType) => SourceFile
+    component: (c: Component) => SourceFile
+    exportHelpers: boolean
+}
+
 export class TypesGenerator {
     private transformer: TypeTransformer
     private schema?: ParsedSchema
@@ -39,26 +58,145 @@ export class TypesGenerator {
     }
 
     generate(schema: ParsedSchema): string {
-        this.schema = schema
         const project = new Project({ useInMemoryFileSystem: true })
         const sf = project.createSourceFile('types.ts')
 
         // Header comments
-        sf.addStatements([
-            '/* eslint-disable */',
-            '// Auto-generated TypeScript types from Strapi schema',
-            '// Do not edit manually',
-        ])
+        sf.addStatements(TYPES_HEADER)
+
+        this.build(schema, {
+            base: sf,
+            contentType: () => sf,
+            component: () => sf,
+            exportHelpers: false,
+        })
+
+        return sf.getFullText()
+    }
+
+    /**
+     * Same declarations as `generate`, spread over one file per content type
+     * and one per component category, plus `base.ts` for the shared blocks and
+     * a `types.ts` barrel so `./types` keeps resolving. Keys are paths relative
+     * to the output dir, with `.js` import specifiers like the rest of the
+     * generated tree.
+     */
+    generateSplit(schema: ParsedSchema): Record<string, string> {
+        const project = new Project({ useInMemoryFileSystem: true })
+        const used = new Set<string>(['base', 'types'].map(n => `${n}.ts`))
+        const files = new Map<string, SourceFile>()
+        const owners = new Map<string, SourceFile>()
+
+        const fileFor = (
+            ownerKey: string,
+            dir: string,
+            stem: string,
+        ): SourceFile => {
+            const known = owners.get(ownerKey)
+            if (known) return known
+            const safe =
+                toKebabCase(stem).replace(/[^a-z0-9_-]+/g, '-') || 'type'
+            let candidate = `${dir}/${safe}.ts`
+            for (let n = 2; used.has(candidate.toLowerCase()); n++) {
+                candidate = `${dir}/${safe}-${n}.ts`
+            }
+            used.add(candidate.toLowerCase())
+            const sf = project.createSourceFile(candidate)
+            files.set(candidate, sf)
+            owners.set(ownerKey, sf)
+            return sf
+        }
+
+        const base = project.createSourceFile('base.ts')
+        files.set('base.ts', base)
+
+        this.build(schema, {
+            base,
+            contentType: ct =>
+                fileFor(`ct:${ct.name}`, 'collections', ct.cleanName),
+            component: c =>
+                fileFor(
+                    `cat:${c.category}`,
+                    'collections/components',
+                    c.category,
+                ),
+            exportHelpers: true,
+        })
+
+        // Which file declares each exported name, to turn references into imports
+        const declaredIn = new Map<string, string>()
+        for (const [file, sf] of files) {
+            for (const name of sf.getExportedDeclarations().keys()) {
+                declaredIn.set(name, file)
+            }
+        }
+
+        const out: Record<string, string> = {}
+        const sorted = [...files.keys()].sort((a, b) =>
+            a === 'base.ts' ? -1 : b === 'base.ts' ? 1 : a.localeCompare(b),
+        )
+        for (const file of sorted) {
+            const sf = files.get(file)!
+            out[file] =
+                [TYPES_HEADER.join('\n'), this.importsFor(file, sf, declaredIn)]
+                    .filter(Boolean)
+                    .join('\n') +
+                '\n\n' +
+                sf.getFullText().trimStart()
+        }
+
+        const barrel = [
+            ...TYPES_HEADER,
+            SPLIT_TYPES_MARKER,
+            ...sorted.map(
+                file => `export * from './${file.replace(/\.ts$/, '.js')}'`,
+            ),
+            '',
+        ].join('\n')
+        return { 'types.ts': barrel, ...out }
+    }
+
+    // `import type` lines for every name a file uses but another file declares
+    private importsFor(
+        file: string,
+        sf: SourceFile,
+        declaredIn: Map<string, string>,
+    ): string {
+        const byFile = new Map<string, Set<string>>()
+        for (const id of sf.getDescendantsOfKind(SyntaxKind.Identifier)) {
+            const parent = id.getParent()
+            const nameNode = (
+                parent as { getNameNode?: () => Node } | undefined
+            )?.getNameNode?.()
+            if (nameNode === id) continue
+            const from = declaredIn.get(id.getText())
+            if (!from || from === file) continue
+            if (!byFile.has(from)) byFile.set(from, new Set())
+            byFile.get(from)!.add(id.getText())
+        }
+        return [...byFile.entries()]
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([from, names]) => {
+                let rel = path.posix.relative(path.posix.dirname(file), from)
+                if (!rel.startsWith('.')) rel = `./${rel}`
+                return `import type { ${[...names].sort().join(', ')} } from '${rel.replace(/\.ts$/, '.js')}'`
+            })
+            .join('\n')
+    }
+
+    private build(schema: ParsedSchema, sinks: TypeSinks): void {
+        this.schema = schema
+        const { base } = sinks
 
         // Base types (static block)
-        sf.addStatements(this.generateBaseTypes())
+        base.addStatements(this.generateBaseTypes())
 
         // Helper types (static block)
-        sf.addStatements(this.generateHelperTypes())
+        base.addStatements(this.generateHelperTypes(sinks.exportHelpers))
 
         // Component interfaces
         for (const component of schema.components) {
-            this.addComponentInterface(sf, component)
+            this.addComponentInterface(sinks.component(component), component)
         }
 
         // Dynamic-zone variants of component interfaces (with __component
@@ -69,36 +207,48 @@ export class TypesGenerator {
         const dzComponentUids = collectDzComponentUids(schema)
         for (const component of schema.components) {
             if (dzComponentUids.has(component.uid)) {
-                this.addComponentDzAlias(sf, component)
+                this.addComponentDzAlias(sinks.component(component), component)
             }
         }
 
         // Component Create/Update Input interfaces
         for (const component of schema.components) {
-            this.addComponentInputInterfaces(sf, component)
+            this.addComponentInputInterfaces(
+                sinks.component(component),
+                component,
+            )
         }
 
         // Dynamic-zone Input variants
         for (const component of schema.components) {
             if (dzComponentUids.has(component.uid)) {
-                this.addComponentDzInputAliases(sf, component)
+                this.addComponentDzInputAliases(
+                    sinks.component(component),
+                    component,
+                )
             }
         }
 
         // Content type interfaces
         for (const contentType of schema.contentTypes) {
-            this.addContentTypeInterface(sf, contentType)
+            this.addContentTypeInterface(
+                sinks.contentType(contentType),
+                contentType,
+            )
         }
 
         // Create/Update Input type interfaces
         for (const contentType of schema.contentTypes) {
-            this.addInputTypeInterfaces(sf, contentType)
+            this.addInputTypeInterfaces(
+                sinks.contentType(contentType),
+                contentType,
+            )
         }
 
         // *Defaults consts (emitted only for entities that declare defaults)
         for (const contentType of schema.contentTypes) {
             this.addDefaultsConst(
-                sf,
+                sinks.contentType(contentType),
                 `${contentType.cleanName}Defaults`,
                 `${contentType.cleanName}CreateInput`,
                 contentType.attributes,
@@ -106,7 +256,7 @@ export class TypesGenerator {
         }
         for (const component of schema.components) {
             this.addDefaultsConst(
-                sf,
+                sinks.component(component),
                 `${component.cleanName}Defaults`,
                 `${component.cleanName}CreateInput`,
                 component.attributes,
@@ -118,7 +268,7 @@ export class TypesGenerator {
         for (const component of schema.components) {
             if (dzComponentUids.has(component.uid)) {
                 this.addDefaultsConst(
-                    sf,
+                    sinks.component(component),
                     `${component.cleanName}DzDefaults`,
                     `${component.cleanName}DzCreateInput`,
                     component.attributes,
@@ -128,28 +278,30 @@ export class TypesGenerator {
         }
 
         // PopulateParam types
-        this.addPopulateParams(sf, schema)
+        this.addPopulateParams(sinks, schema)
 
         // Payload utility types
-        this.addPayloadUtilityTypes(sf, schema)
+        this.addPayloadUtilityTypes(sinks, schema)
 
         // Filter utility types (static block)
-        sf.addStatements(generateFilterUtilityTypes())
+        base.addStatements(generateFilterUtilityTypes())
 
         // Typed query params (static block)
-        sf.addStatements(generateTypedQueryParams())
+        base.addStatements(generateTypedQueryParams())
 
         // Component filters
         for (const component of schema.components) {
-            sf.addStatements(generateComponentFilters(component))
+            sinks
+                .component(component)
+                .addStatements(generateComponentFilters(component))
         }
 
         // Entity-specific filters
         for (const contentType of schema.contentTypes) {
-            sf.addStatements(generateEntityFilters(contentType))
+            sinks
+                .contentType(contentType)
+                .addStatements(generateEntityFilters(contentType))
         }
-
-        return sf.getFullText()
     }
 
     private generateBaseTypes(): string {
@@ -410,13 +562,15 @@ export interface LinkInline {
 }`
     }
 
-    private generateHelperTypes(): string {
+    private generateHelperTypes(exported: boolean): string {
+        // Split mode shares these across files, so they have to be exported
+        const ex = exported ? 'export ' : ''
         return `// Helper types for field and sort options in populate
-type _EntityField<T> = Exclude<keyof T & string, '__typename'>
-type _SortValue<T> = _EntityField<T> | \`\${_EntityField<T>}:\${"asc" | "desc"}\`
+${ex}type _EntityField<T> = Exclude<keyof T & string, '__typename'>
+${ex}type _SortValue<T> = _EntityField<T> | \`\${_EntityField<T>}:\${"asc" | "desc"}\`
 
 // Apply fields narrowing from populate entry (e.g. populate: { item: { fields: ["title"] } })
-type _ApplyFields<TFull, TBase, TEntry> = TEntry extends true ? TFull : TEntry extends { fields: readonly (infer F extends string)[] } ? Pick<TBase, Extract<F | 'id' | 'documentId', keyof TBase>> & Omit<TFull, keyof TBase> : TFull`
+${ex}type _ApplyFields<TFull, TBase, TEntry> = TEntry extends true ? TFull : TEntry extends { fields: readonly (infer F extends string)[] } ? Pick<TBase, Extract<F | 'id' | 'documentId', keyof TBase>> & Omit<TFull, keyof TBase> : TFull`
     }
 
     // Constraint/default JSDoc for a property, as a spreadable ts-morph
@@ -603,8 +757,8 @@ type _ApplyFields<TFull, TBase, TEntry> = TEntry extends true ? TFull : TEntry e
         }
     }
 
-    private addPopulateParams(sf: SourceFile, schema: ParsedSchema): void {
-        sf.addStatements([
+    private addPopulateParams(sinks: TypeSinks, schema: ParsedSchema): void {
+        sinks.base.addStatements([
             '// ============================================',
             '// PopulateParam types for type-safe populate',
             '// ============================================',
@@ -614,7 +768,7 @@ type _ApplyFields<TFull, TBase, TEntry> = TEntry extends true ? TFull : TEntry e
         for (const component of schema.components) {
             const typeBody = this.buildPopulateParamTypeBody(component)
             if (typeBody) {
-                sf.addTypeAlias({
+                sinks.component(component).addTypeAlias({
                     name: `${component.cleanName}PopulateParam`,
                     isExported: true,
                     type: typeBody,
@@ -626,7 +780,7 @@ type _ApplyFields<TFull, TBase, TEntry> = TEntry extends true ? TFull : TEntry e
         for (const contentType of schema.contentTypes) {
             const typeBody = this.buildPopulateParamTypeBody(contentType)
             if (typeBody) {
-                sf.addTypeAlias({
+                sinks.contentType(contentType).addTypeAlias({
                     name: `${contentType.cleanName}PopulateParam`,
                     isExported: true,
                     type: typeBody,
@@ -705,8 +859,12 @@ type _ApplyFields<TFull, TBase, TEntry> = TEntry extends true ? TFull : TEntry e
         return `{\n${fields.join('\n')}\n}`
     }
 
-    private addPayloadUtilityTypes(sf: SourceFile, schema: ParsedSchema): void {
-        sf.addStatements(`// Prisma-like Payload types for populate support
+    private addPayloadUtilityTypes(
+        sinks: TypeSinks,
+        schema: ParsedSchema,
+    ): void {
+        sinks.base
+            .addStatements(`// Prisma-like Payload types for populate support
 // These types allow type-safe population of relations
 //
 // Usage example:
@@ -718,14 +876,18 @@ type _ApplyFields<TFull, TBase, TEntry> = TEntry extends true ? TFull : TEntry e
         // Generate GetPayload type for each component with populatable fields
         for (const component of schema.components) {
             if (this.hasAnyPopulatableFields(component)) {
-                sf.addStatements(this.buildGetPayloadType(component))
+                sinks
+                    .component(component)
+                    .addStatements(this.buildGetPayloadType(component))
             }
         }
 
         // Generate GetPayload type for each content type with populatable fields
         for (const contentType of schema.contentTypes) {
             if (this.hasAnyPopulatableFields(contentType)) {
-                sf.addStatements(this.buildGetPayloadType(contentType))
+                sinks
+                    .contentType(contentType)
+                    .addStatements(this.buildGetPayloadType(contentType))
             }
         }
     }

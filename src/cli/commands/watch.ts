@@ -17,6 +17,7 @@ export interface WatchOptions {
     format?: 'js' | 'ts'
     typecheck?: boolean
     validation?: ValidationMode
+    splitTypes?: boolean
 }
 
 /**
@@ -56,6 +57,7 @@ export async function watch(options: WatchOptions): Promise<void> {
         format: options.format,
         typecheck: options.typecheck,
         validation: options.validation,
+        splitTypes: options.splitTypes,
     })
     if (!initial.success) {
         console.error('Failed to generate types:', initial.error)
@@ -93,6 +95,7 @@ export async function watch(options: WatchOptions): Promise<void> {
                         format: options.format,
                         typecheck: options.typecheck,
                         validation: options.validation,
+                        splitTypes: options.splitTypes,
                     })
 
                     if (result.success) {
@@ -146,6 +149,8 @@ interface WatchCliOptions {
     format?: string
     typecheck?: boolean
     validation?: string
+    splitTypes?: boolean
+    singleFile?: boolean
 }
 
 /**
@@ -182,7 +187,18 @@ export function createWatchCommand(program: Command): void {
             '--validation <zod|none>',
             'Also generate Zod validators for create/update inputs (needs zod 4 installed). Defaults to the mode already in --output, else none',
         )
+        .option(
+            '--split-types',
+            'Write one types file per collection and component category instead of a single types.ts. Defaults to the layout already in --output',
+        )
+        .option('--single-file', 'Write a single types.ts (undo --split-types)')
         .action(async (opts: WatchCliOptions) => {
+            if (opts.splitTypes && opts.singleFile) {
+                console.error(
+                    '--split-types and --single-file cannot be used together.',
+                )
+                process.exit(1)
+            }
             if (opts.format && opts.format !== 'js' && opts.format !== 'ts') {
                 console.error(
                     `Invalid --format value: ${opts.format}. Expected 'js' or 'ts'.`,
@@ -205,6 +221,11 @@ export function createWatchCommand(program: Command): void {
                     format: opts.format as 'js' | 'ts' | undefined,
                     typecheck: opts.typecheck,
                     validation: opts.validation,
+                    splitTypes: opts.splitTypes
+                        ? true
+                        : opts.singleFile
+                          ? false
+                          : undefined,
                 })
             } catch (err) {
                 console.error((err as Error).message)
