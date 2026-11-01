@@ -331,6 +331,33 @@ describe('generated client: tokenStorage + session hooks', () => {
         expect(store.value()).toBe('R2')
     })
 
+    it.each([408, 429])(
+        'a %i refresh (proxy timeout / rate limit) is transient: storage kept, no onSessionExpired',
+        async status => {
+            const store = memoryStorage('R1')
+            let fail = true
+            const backend = fakeBackend({
+                refresh: () =>
+                    fail
+                        ? json({ error: { message: 'slow down' } }, status)
+                        : json({ jwt: 'B', refreshToken: 'R2' }),
+            })
+            const expired: unknown[] = []
+            const client = new RefreshClient({
+                baseURL: 'http://x',
+                fetch: backend.fetch,
+                tokenStorage: store.storage,
+                onSessionExpired: (i: unknown) => void expired.push(i),
+            })
+            await expect(client.auth.refresh()).resolves.toBe(false)
+            expect(store.value()).toBe('R1')
+            expect(expired).toEqual([])
+            fail = false
+            await expect(client.auth.refresh()).resolves.toBe(true)
+            expect(store.value()).toBe('R2')
+        },
+    )
+
     it('a cancelled biometric prompt (getRefreshToken throws) is not a dead session', async () => {
         const store = memoryStorage('R1')
         store.failing.get = true

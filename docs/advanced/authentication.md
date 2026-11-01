@@ -58,7 +58,7 @@ export default {
 
 - **Access token in memory.** Auth responses that carry a `jwt` (`login`, `register`, OAuth `callback`, `resetPassword`, `changePassword`, `confirmEmail`) store it on the client instance automatically. It is sent as `Authorization: Bearer` on every request and never touches `localStorage`.
 - **Transparent refresh on 401/403.** When a request sent with the session's own token fails with 401 (expired access token), the client performs `POST /api/auth/refresh` and retries the original request once. The same happens for a **403 on a fully anonymous request** — that is what Strapi actually returns when a protected route is hit with no credentials (the anonymous caller authenticates as the public role and gets `ForbiddenError`, never 401), and it is exactly the page-reload bootstrap case: access token gone from memory, refresh cookie still alive. Concurrent failures share a single in-flight refresh (single-flight). If the refresh fails, the session is dropped and the original error propagates — your `onError` hook fires as usual. A 403 under any Bearer is an honest permission error and always passes through untouched.
-- **Dead-session latch.** Once the server definitively rejects a refresh (4xx) — or after `logout()`/`clearToken()` — the automatic refresh goes quiet instead of re-hitting the backend on every subsequent 401/403. A successful `login()` or an explicit `auth.refresh()` lifts the latch (call `refresh()` to resume a session started in another tab). Transient failures (5xx, network errors) never latch and never drop the tokens.
+- **Dead-session latch.** Once the server definitively rejects a refresh (a 4xx other than 408 or 429) — or after `logout()`/`clearToken()` — the automatic refresh goes quiet instead of re-hitting the backend on every subsequent 401/403. A successful `login()` or an explicit `auth.refresh()` lifts the latch (call `refresh()` to resume a session started in another tab). Transient failures (5xx, 408, 429, network errors) never latch and never drop the tokens.
 - **Race-safe.** A refresh that is already on the wire when you `login()` or `logout()` cannot override them: its late outcome is discarded, so a sign-out never gets resurrected by a stray refresh success, and a fresh login never gets wiped by a stale refresh rejection.
 - **Browser-only by default.** The entire session flow — token capture, Bearer injection, automatic refresh — is inert in Node unless you pass a `tokenStorage` (see [Persisting the session](#persisting-the-session-react-native-and-other-apps)). There is no cookie jar for a cookie-based refresh, and silently storing tokens on a client instance that may be shared across requests (e.g. a module-level singleton in Next.js) would leak one user's session into another's requests. An explicit `auth.refresh()` still performs the request and reports the result, but stores nothing outside the browser. Server-side code should keep using long-lived API tokens via `token` (or explicit `setToken`).
 - **Plays fair with `onRequest`.** If your hook sets the `Authorization` header, it owns auth for that request — the session flow will not refresh or retry it. The hook also runs for the flow's own `POST /api/auth/refresh`, so infrastructure headers (tenant ids, proxy keys) reach it; the flow never attaches `Authorization` to its refresh request itself.
@@ -119,6 +119,7 @@ By default the session lives in memory only. Strapi rotates the refresh token on
 
 ```typescript
 import * as SecureStore from 'expo-secure-store'
+import { router } from 'expo-router'
 import { StrapiClient } from './strapi'
 
 // Face ID / fingerprint before the token is read; drop it if a prompt is too much
@@ -141,8 +142,10 @@ export const strapi = new StrapiClient({
     },
 })
 
-// App start: restore the session from secure storage
-const isLoggedIn = await strapi.auth.refresh()
+// Call once on app start (e.g. behind the splash screen): restores the session from secure storage
+export function restoreSession(): Promise<boolean> {
+    return strapi.auth.refresh()
+}
 ```
 
 What the client does with it:
@@ -159,7 +162,7 @@ Storage methods may be sync (MMKV) or async (Keychain, `expo-secure-store`). Onl
 | `onTokenRefreshed({ accessToken, refreshToken? })` | A refresh succeeded and the rotated token is stored.                                                                 |
 | `onSessionExpired({ reason, status? })`            | The server definitively rejected the session (a 4xx on refresh, or a 2xx without a jwt). Storage is already cleared. |
 
-Neither hook runs for transient failures (5xx, network, a cancelled biometric prompt, so the user can retry) or for an explicit `logout()` / `clearToken()`. A throwing hook or a failing storage never breaks the request; enable `debug` to see them logged.
+Neither hook runs for transient failures (5xx, 408, 429, network, a cancelled biometric prompt, so the user can retry) or for an explicit `logout()` / `clearToken()`. A throwing hook or a failing storage never breaks the request; enable `debug` to see them logged.
 
 ::: warning
 Pass the storage of one user per client instance. Providing `tokenStorage` also switches the session flow on outside a browser (for React Native runtimes without `window`), which the client otherwise refuses to do so that a shared server-side instance never keeps one user's tokens for another.

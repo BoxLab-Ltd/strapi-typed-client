@@ -537,7 +537,7 @@ export class ClientGenerator {
                     name: 'reason',
                     type: "'refresh-rejected' | 'invalid-response'",
                     docs: [
-                        "'refresh-rejected': the server answered the refresh with a 4xx. 'invalid-response': it answered 2xx without a jwt.",
+                        "'refresh-rejected': the server answered the refresh with a 4xx other than 408 or 429. 'invalid-response': it answered 2xx without a jwt.",
                     ],
                 },
                 {
@@ -607,7 +607,7 @@ export class ClientGenerator {
                     type: '(info: StrapiSessionExpiredInfo) => void | Promise<void>',
                     hasQuestionToken: true,
                     docs: [
-                        'Called when the server definitively rejects the session (refresh answered 4xx, or 2xx without a jwt): the stored token is already cleared, so route the user to sign-in. Not called for transient failures (5xx, network, a cancelled biometric prompt) or for an explicit `auth.logout()` / `clearToken()`. Errors thrown here are swallowed.',
+                        'Called when the server definitively rejects the session (refresh answered a 4xx other than 408 or 429, or 2xx without a jwt): the stored token is already cleared, so route the user to sign-in. Not called for transient failures (5xx, 408, 429, network, a cancelled biometric prompt) or for an explicit `auth.logout()` / `clearToken()`. Errors thrown here are swallowed.',
                     ],
                 },
                 {
@@ -930,7 +930,7 @@ interface _AuthSessionState {
   // Set when the server definitively rejected a refresh (or after an
   // explicit clearToken/logout): the automatic refresh stays quiet until the
   // next login or explicit auth.refresh(), instead of re-hitting the backend
-  // on every 401. Transient failures (5xx, network) never set this.
+  // on every 401. Transient failures (5xx, 408, 429, network) never set this.
   dead?: boolean
   // Bumped by login (_captureSession) and clearToken/logout. An in-flight
   // refresh snapshots it and discards its own outcome when it changed:
@@ -1169,9 +1169,12 @@ class BaseAPI {
       if (session.epoch !== epoch) return !!session.accessToken
       if (!response.ok) {
         // 4xx = the session is gone for good (401 dead, 403 rejected,
-        // 404 legacy backend) — drop it and latch. 5xx is transient:
-        // keep everything and let the original 401 propagate.
-        if (response.status < 500 && persist) {
+        // 404 legacy backend) — drop it and latch. 5xx, 408 and 429 (a
+        // proxy timing out or rate-limiting) are transient: keep everything
+        // and let the original 401 propagate.
+        const transient =
+          response.status >= 500 || response.status === 408 || response.status === 429
+        if (!transient && persist) {
           session.accessToken = undefined
           session.refreshToken = undefined
           session.dead = true
