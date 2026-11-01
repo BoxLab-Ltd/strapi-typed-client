@@ -610,6 +610,8 @@ ${bodyBlock}
     // Invalidate any in-flight refresh: signing out must win the race — a
     // late refresh success must not resurrect this cleared session.
     session.epoch++
+    // Also forget the persisted refresh token (no-op without tokenStorage)
+    await this._clearStoredRefreshToken(session)
   }`
 
         if (authMode === 'refresh') {
@@ -620,9 +622,14 @@ ${bodyBlock}
    * Always attempts the request: unlike the automatic 401 handling it goes
    * through the dead-session latch (and lifts it on success), so use it to
    * resume a session started elsewhere, e.g. a login in another tab.
-   * Browser-only persistence: in Node the request is still made and the
-   * result reported, but no tokens are stored — a shared server-side client
-   * must never keep one caller's session for the next caller.
+   * With \`tokenStorage\` configured this is the app-start restore: the
+   * refresh token is read from storage (a biometric prompt fires here), the
+   * rotated token is written back, and \`onTokenRefreshed\` is called. No
+   * stored token means no session — it returns false without a request.
+   * Without \`tokenStorage\`, persistence is browser-only: in Node the request
+   * is still made and the result reported, but no tokens are stored — a
+   * shared server-side client must never keep one caller's session for the
+   * next caller.
    * @returns false when there is no live session to resume.
    */
   async refresh(): Promise<boolean> {
@@ -631,11 +638,15 @@ ${bodyBlock}
 
             const logout = `  /**
    * POST /api/auth/logout — revoke the server-side session, then clear the
-   * in-memory tokens. Best-effort: local state is cleared even when the
-   * server call fails (e.g. the session is already dead).
+   * in-memory tokens (and the one in \`tokenStorage\`, if any). Best-effort:
+   * local state is cleared even when the server call fails (e.g. the
+   * session is already dead). With \`tokenStorage\` the refresh token is read
+   * from storage first when it is not in memory yet, so the server session
+   * is really revoked after an app restart.
    */
   async logout(${NEXT_OPTIONS_PARAM}): Promise<void> {
     const session = getAuthSession(this.config)
+    await this._loadRefreshToken(session)
     try {
       await ${buildRequestCall({
           responseType: 'unknown',
