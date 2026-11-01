@@ -27,46 +27,56 @@ function outDir(): string {
     return dir
 }
 
-describe('generation without the users-permissions plugin (#99)', () => {
-    afterEach(() => {
-        for (const d of tmpDirs.splice(0)) {
-            fs.rmSync(d, { recursive: true, force: true })
-        }
-    })
+// Each test runs a full generation with a strict type check; CI runners are several times slower
+const GENERATION_TIMEOUT = 30_000
 
-    for (const format of ['ts', 'js'] as const) {
-        it(`passes the type-check guard in ${format} mode`, async () => {
+describe(
+    'generation without the users-permissions plugin (#99)',
+    { timeout: GENERATION_TIMEOUT },
+    () => {
+        afterEach(() => {
+            for (const d of tmpDirs.splice(0)) {
+                fs.rmSync(d, { recursive: true, force: true })
+            }
+        })
+
+        for (const format of ['ts', 'js'] as const) {
+            it(`passes the type-check guard in ${format} mode`, async () => {
+                const dir = outDir()
+                await new Generator(dir).generate(
+                    schemaWithoutUsersPermissions,
+                    {
+                        endpoints: [],
+                        format,
+                    },
+                )
+            })
+        }
+
+        it('emits no auth namespace or User references', async () => {
             const dir = outDir()
             await new Generator(dir).generate(schemaWithoutUsersPermissions, {
                 endpoints: [],
-                format,
+                format: 'ts',
             })
+            const client = fs.readFileSync(path.join(dir, 'client.ts'), 'utf-8')
+
+            expect(client).not.toMatch(/\bUser\b/)
+            expect(client).not.toContain('class AuthAPI')
+            expect(client).not.toContain('UsersPermissionsUserAPI')
+            expect(client).not.toMatch(/^\s*auth: AuthAPI/m)
         })
-    }
 
-    it('emits no auth namespace or User references', async () => {
-        const dir = outDir()
-        await new Generator(dir).generate(schemaWithoutUsersPermissions, {
-            endpoints: [],
-            format: 'ts',
+        it('keeps the auth namespace when the plugin is present', async () => {
+            const dir = outDir()
+            await new Generator(dir).generate(mockSchema, {
+                endpoints: [],
+                format: 'ts',
+            })
+            const client = fs.readFileSync(path.join(dir, 'client.ts'), 'utf-8')
+
+            expect(client).toContain('class AuthAPI')
+            expect(client).toMatch(/^\s*auth: AuthAPI/m)
         })
-        const client = fs.readFileSync(path.join(dir, 'client.ts'), 'utf-8')
-
-        expect(client).not.toMatch(/\bUser\b/)
-        expect(client).not.toContain('class AuthAPI')
-        expect(client).not.toContain('UsersPermissionsUserAPI')
-        expect(client).not.toMatch(/^\s*auth: AuthAPI/m)
-    })
-
-    it('keeps the auth namespace when the plugin is present', async () => {
-        const dir = outDir()
-        await new Generator(dir).generate(mockSchema, {
-            endpoints: [],
-            format: 'ts',
-        })
-        const client = fs.readFileSync(path.join(dir, 'client.ts'), 'utf-8')
-
-        expect(client).toContain('class AuthAPI')
-        expect(client).toMatch(/^\s*auth: AuthAPI/m)
-    })
-})
+    },
+)
