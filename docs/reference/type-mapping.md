@@ -67,14 +67,16 @@ const article = await strapi.articles.findOne('abc123', {
 
 ### Input Types (create/update)
 
-In input types, every relation is typed as `RelationInput` (`StrapiID | RelationRef | (StrapiID | RelationRef)[] | RelationOperations | null`, where `StrapiID = string | number` and `RelationRef` is the `{ documentId?, id?, locale?, status?, position? }` object form). A plain id or array is shorthand for `set`; the explicit `{ connect | disconnect | set }` form is also accepted:
+In input types, each relation is typed `RelationInput<Kind>` after its own cardinality, where `StrapiID = string | number`, `RelationRef` is the `{ documentId?, id?, locale?, status?, position? }` object form and `RelationTarget = StrapiID | RelationRef`. A plain id or array is shorthand for `set`; the explicit `{ connect | disconnect | set }` form is also accepted. To-one fields hold at most one target (Strapi silently keeps only the last of several), to-many fields take any number:
 
-| Relation Type | Input TypeScript Type |
-| ------------- | --------------------- |
-| `oneToOne`    | `RelationInput`       |
-| `manyToOne`   | `RelationInput`       |
-| `oneToMany`   | `RelationInput`       |
-| `manyToMany`  | `RelationInput`       |
+| Relation Type | Input TypeScript Type         | Accepts                                                                                 |
+| ------------- | ----------------------------- | --------------------------------------------------------------------------------------- |
+| `oneToOne`    | `RelationInput<'oneToOne'>`   | one target, `[]` or `[target]`, `{ connect \| disconnect \| set }` (one target), `null` |
+| `manyToOne`   | `RelationInput<'manyToOne'>`  | same as `oneToOne`                                                                      |
+| `oneToMany`   | `RelationInput<'oneToMany'>`  | one target, `RelationTarget[]`, `{ connect \| disconnect \| set }`, `null`              |
+| `manyToMany`  | `RelationInput<'manyToMany'>` | same as `oneToMany`                                                                     |
+
+`RelationInput` without a type argument accepts every shape. `oneWay` maps to `oneToOne` and `manyWay` to `manyToMany`; the `morph*` kinds map to the to-one or to-many kind they name.
 
 ## Base Fields
 
@@ -163,16 +165,16 @@ Nullability depends on the `required` setting in your Strapi schema and the type
 
 - `*CreateInput` requires the fields Strapi requires on create (a required field with a schema `default` stays optional — Strapi fills it in); `*UpdateInput` makes every key optional.
 - Non-required scalars accept `null` to clear a value; repeatable components and dynamic zones do not (send `[]`).
-- Relation fields are typed `RelationInput`, media fields `MediaInput` / `MultiMediaInput`, components their `*CreateInput` / `*UpdateInput`.
+- Relation fields are typed `RelationInput<Kind>` after their cardinality, media fields `MediaInput` / `MultiMediaInput`, components their `*CreateInput` / `*UpdateInput`.
 
 ```ts
 interface ArticleCreateInput {
     title: string // required
     body?: string | null
-    category?: RelationInput // relation (id, documentId, reference object, array, or operations)
+    category?: RelationInput<'manyToOne'> // relation (one id or reference, at most one in a list, or operations)
     cover?: MediaInput // media by id
     seo?: SeoCreateInput | null // component as object
-    tags?: RelationInput // relation (any cardinality)
+    tags?: RelationInput<'manyToMany'> // relation (ids, references, or operations)
 }
 ```
 
