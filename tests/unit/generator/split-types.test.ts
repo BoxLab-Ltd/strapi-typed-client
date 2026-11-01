@@ -9,8 +9,6 @@ import { isSplitTypesOutput } from '../../../src/shared/client-header.js'
 import type { ParsedSchema } from '../../../src/schema-types.js'
 import { mockSchema } from './fixtures/mock-schema.js'
 
-// Public names must match between layouts; the underscore helpers are exported
-// in split mode only because the per-collection files share them
 function exportedNames(dir: string): string[] {
     const program = ts.createProgram([path.join(dir, 'types.ts')], {
         target: ts.ScriptTarget.ES2022,
@@ -25,7 +23,6 @@ function exportedNames(dir: string): string[] {
     return checker
         .getExportsOfModule(symbol)
         .map(s => s.getName())
-        .filter(n => !n.startsWith('_'))
         .sort()
 }
 
@@ -50,12 +47,6 @@ describe('split types', { timeout: 60_000 }, () => {
         fs.rmSync(tmp, { recursive: true, force: true })
     })
 
-    it('single-file generation is unchanged by the split code path', () => {
-        const gen = new TypesGenerator()
-        expect(gen.generate(mockSchema)).toBe(gen.generate(mockSchema))
-        expect(gen.generate(mockSchema)).not.toContain('./base.js')
-    })
-
     it('puts each content type and component category in its own file', () => {
         const files = new TypesGenerator().generateSplit(mockSchema)
         const names = Object.keys(files)
@@ -77,9 +68,13 @@ describe('split types', { timeout: 60_000 }, () => {
         )
         expect(files['types.ts']).toContain("export * from './base.js'")
         expect(files['base.ts']).toContain('export interface MediaFile')
+        expect(files['collections/_internal.ts']).toContain(
+            'export type _ApplyFields',
+        )
+        expect(files['types.ts']).not.toContain('_internal')
     })
 
-    it('exports the same public names as the single file (ts)', async () => {
+    it('exports exactly the names of the single file (ts)', async () => {
         const single = path.join(tmp, 'single')
         const split = path.join(tmp, 'split')
         await new Generator(single).generate(mockSchema, { format: 'ts' })
@@ -88,6 +83,7 @@ describe('split types', { timeout: 60_000 }, () => {
             splitTypes: true,
         })
         expect(exportedNames(split)).toEqual(exportedNames(single))
+        expect(exportedNames(split)).not.toContain('_ApplyFields')
         expect(isSplitTypesOutput(split)).toBe(true)
         expect(isSplitTypesOutput(single)).toBe(false)
     })

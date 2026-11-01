@@ -35,6 +35,7 @@ src/strapi/
   types.ts                      # barrel: re-exports everything below
   base.ts                       # shared primitives, filter operators, query helpers
   collections/
+    _internal.ts                # helpers the files share; not re-exported from `types`
     article.ts                  # Article, ArticleCreateInput, ArticleFilters, ArticlePopulateParam, ArticleGetPayload, ...
     category.ts
     components/

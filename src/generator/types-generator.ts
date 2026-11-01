@@ -46,8 +46,12 @@ interface TypeSinks {
     base: SourceFile
     contentType: (ct: ContentType) => SourceFile
     component: (c: Component) => SourceFile
+    helpers: SourceFile
     exportHelpers: boolean
 }
+
+// Shared by the split files but kept out of the `types` barrel, so both layouts export the same names
+const INTERNAL_TYPES_FILE = 'collections/_internal.ts'
 
 export class TypesGenerator {
     private transformer: TypeTransformer
@@ -68,6 +72,7 @@ export class TypesGenerator {
             base: sf,
             contentType: () => sf,
             component: () => sf,
+            helpers: sf,
             exportHelpers: false,
         })
 
@@ -83,7 +88,11 @@ export class TypesGenerator {
      */
     generateSplit(schema: ParsedSchema): Record<string, string> {
         const project = new Project({ useInMemoryFileSystem: true })
-        const used = new Set<string>(['base', 'types'].map(n => `${n}.ts`))
+        const used = new Set<string>([
+            'base.ts',
+            'types.ts',
+            INTERNAL_TYPES_FILE,
+        ])
         const files = new Map<string, SourceFile>()
         const owners = new Map<string, SourceFile>()
 
@@ -109,6 +118,8 @@ export class TypesGenerator {
 
         const base = project.createSourceFile('base.ts')
         files.set('base.ts', base)
+        const helpers = project.createSourceFile(INTERNAL_TYPES_FILE)
+        files.set(INTERNAL_TYPES_FILE, helpers)
 
         this.build(schema, {
             base,
@@ -120,6 +131,7 @@ export class TypesGenerator {
                     'collections/components',
                     c.category,
                 ),
+            helpers,
             exportHelpers: true,
         })
 
@@ -148,9 +160,11 @@ export class TypesGenerator {
         const barrel = [
             ...TYPES_HEADER,
             SPLIT_TYPES_MARKER,
-            ...sorted.map(
-                file => `export * from './${file.replace(/\.ts$/, '.js')}'`,
-            ),
+            ...sorted
+                .filter(file => file !== INTERNAL_TYPES_FILE)
+                .map(
+                    file => `export * from './${file.replace(/\.ts$/, '.js')}'`,
+                ),
             '',
         ].join('\n')
         return { 'types.ts': barrel, ...out }
@@ -192,7 +206,9 @@ export class TypesGenerator {
         base.addStatements(this.generateBaseTypes())
 
         // Helper types (static block)
-        base.addStatements(this.generateHelperTypes(sinks.exportHelpers))
+        sinks.helpers.addStatements(
+            this.generateHelperTypes(sinks.exportHelpers),
+        )
 
         // Component interfaces
         for (const component of schema.components) {
