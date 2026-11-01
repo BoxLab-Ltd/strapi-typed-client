@@ -99,6 +99,19 @@ type RelationInput<K extends RelationKind = RelationKind> = K extends
 
 The one thing the kind changes is the **to-one limit**: a to-one relation holds a single entry, and Strapi quietly keeps only the last one when it is sent several (`category: ['a', 'b']` links `b` and drops `a` without an error). The input types and the Zod validators reject that, so the mistake shows up at compile time instead of as lost data. To-many fields take any number of targets, plus a bare id as a one-element `set`, because Strapi accepts both.
 
+::: tip Passing an array variable to a to-one field
+A to-one list is typed as a tuple (`[] | [RelationTarget]`), so a `string[]` variable no longer fits even when it holds a single id. Pick the id you mean instead:
+
+```ts
+const ids: string[] = selected.map(c => c.documentId)
+
+await strapi.articles.update(id, { category: ids }) // ✗ string[] may hold several ids
+await strapi.articles.update(id, { category: ids[0] ?? null }) // ✓ links the first, or clears
+```
+
+To-many fields keep accepting `string[]` as before.
+:::
+
 `RelationInput` without a type argument is the union of both and accepts every shape, which is what you want in a hand-written helper that handles any relation. The kinds come from your schema: `oneWay` and the `morph*` relation names map to the matching to-one or to-many kind.
 
 A plain id or array is shorthand for `set` — it overwrites the existing relations. Use the explicit `{ connect | disconnect | set }` form for fine-grained updates.

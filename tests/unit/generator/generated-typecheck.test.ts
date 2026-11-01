@@ -357,6 +357,16 @@ async function _assert() {
   const _badOne: import('./types').RelationInput<'oneToOne'> = ['a', 'b']
   const _kind: import('./types').RelationKind = 'manyToMany'
   void [_anyRel, _anyOne, _toOneRel, _badOne, _kind]
+  // a string[] may hold several ids, so a to-one takes one picked out of it
+  const _ids: string[] = ['a']
+  // @ts-expect-error - string[] is not [] | [RelationTarget]
+  await client.items.update('id', { category: _ids })
+  // @ts-expect-error - nor is a slice of it
+  await client.items.update('id', { category: _ids.slice(-1) })
+  await client.items.update('id', { category: _ids[0] ?? null })
+  await client.items.update('id', { category: { connect: _ids.length ? [_ids[0]!] : [] } })
+  await client.widgets.update('id', { relatedItems: _ids })
+  await client.widgets.update('id', { relatedItems: { connect: _ids } })
   // write params follow what Strapi reads for the type (#105)
   await client.items.create({ title: 'x' }, { locale: 'fr', status: 'draft' })
   await client.items.update('id', {}, { locale: 'fr' }, { revalidate: 60 })
