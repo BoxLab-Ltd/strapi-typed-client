@@ -4,6 +4,11 @@ import { AuthApiGenerator } from './auth-api-generator.js'
 import type { ParsedRoute, ParsedRoutes } from '../shared/route-types.js'
 import { CustomApiGenerator } from './custom-api-generator.js'
 import { PluginApiGenerator } from './plugin-api-generator.js'
+import {
+    PluginRoutesGenerator,
+    isOtherPluginEndpoint,
+    type PluginRoutesApi,
+} from './plugin-routes-generator.js'
 import { PLUGIN_REGISTRY } from './plugin-registry.js'
 import { STRAPI_ERROR_REGISTRY } from './strapi-error-registry.js'
 import {
@@ -94,11 +99,13 @@ export class ClientGenerator {
     private authApiGenerator: AuthApiGenerator
     private customApiGenerator: CustomApiGenerator
     private pluginApiGenerator: PluginApiGenerator
+    private pluginRoutesGenerator: PluginRoutesGenerator
 
     constructor() {
         this.authApiGenerator = new AuthApiGenerator()
         this.customApiGenerator = new CustomApiGenerator()
         this.pluginApiGenerator = new PluginApiGenerator()
+        this.pluginRoutesGenerator = new PluginRoutesGenerator()
     }
 
     generate(
@@ -112,6 +119,11 @@ export class ClientGenerator {
     ): string {
         const project = new Project({ useInMemoryFileSystem: true })
         const sf = project.createSourceFile('client.ts')
+
+        const otherPluginEndpoints = (endpoints ?? []).filter(
+            isOtherPluginEndpoint,
+        )
+        endpoints = endpoints?.filter(e => !isOtherPluginEndpoint(e))
 
         // Parse custom routes and custom types
         let parsedRoutes: ParsedRoutes | undefined
@@ -210,9 +222,22 @@ export class ClientGenerator {
             this.pluginApiGenerator.generateAllPluginClasses(activePlugins),
         )
 
+        const pluginRoutes = this.pluginRoutesGenerator.plan(
+            otherPluginEndpoints,
+            this.clientMemberNames(schema, parsedRoutes, activePlugins),
+        )
+        const pluginRouteClasses =
+            this.pluginRoutesGenerator.generateClasses(pluginRoutes)
+        if (pluginRouteClasses) sf.addStatements(pluginRouteClasses)
+
         // Main StrapiClient class
         sf.addStatements(
-            this.generateStrapiClient(schema, parsedRoutes, activePlugins),
+            this.generateStrapiClient(
+                schema,
+                parsedRoutes,
+                activePlugins,
+                pluginRoutes,
+            ),
         )
 
         allowUndefinedOnOptionalProperties(sf)
@@ -1488,6 +1513,10 @@ class BaseAPI {
       return null as R
     }
 
+    return this.parseResponse<R>(response)
+  }
+
+  protected parseResponse<R>(response: Response): Promise<R> {
     return response.json()
   }
 
@@ -1957,6 +1986,7 @@ ${customMethods}
         schema: ParsedSchema,
         parsedRoutes?: ParsedRoutes,
         activePlugins: typeof PLUGIN_REGISTRY = PLUGIN_REGISTRY,
+        pluginRoutes: PluginRoutesApi[] = [],
     ): string {
         // Build property declarations
         const propertyDeclarations = schema.contentTypes
@@ -2053,6 +2083,12 @@ ${customMethods}
         const pluginInitsBlock = pluginInits
             ? `\n    // Initialize plugin APIs\n${pluginInits}\n`
             : ''
+        const pluginRoutesDeclarationsBlock = pluginRoutes.length
+            ? `\n  // Content-API routes of other installed plugins\n${pluginRoutes.map(p => `  ${p.propName}: ${p.className}`).join('\n')}\n`
+            : ''
+        const pluginRoutesInitsBlock = pluginRoutes.length
+            ? `\n${pluginRoutes.map(p => `    this.${p.propName} = new ${p.className}(this.config)`).join('\n')}\n`
+            : ''
 
         const usersPermissions = hasUsersPermissions(schema)
         const authDeclarationBlock = usersPermissions
@@ -2077,12 +2113,14 @@ ${authDeclarationBlock}
 ${pluginDeclarationsBlock}
 ${propertyDeclarations}
 ${standaloneDeclarations}
+${pluginRoutesDeclarationsBlock}
   constructor(config: StrapiClientConfig) {
     this.config = config
 ${authInitBlock}
 ${pluginInitsBlock}
 ${propertyInits}
 ${standaloneInits}
+${pluginRoutesInitsBlock}
     // Auto-validate schema in development mode
     if (config.validateSchema) {
       this.validateSchema().then(result => {
@@ -2193,59 +2231,76 @@ ${standaloneInits}
         }
     }
 
+    // Controllers with custom routes but no content type of their own
+    private standaloneApis(
+        schema: ParsedSchema,
+        parsedRoutes?: ParsedRoutes,
+    ): { className: string; propName: string }[] {
+        if (!parsedRoutes) return []
+        const apis: { className: string; propName: string }[] = []
+        for (const [controller, routes] of parsedRoutes.byController) {
+            if (controller === 'auth' || controller === 'user') continue
+            const hasContentType = schema.contentTypes.some(
+                ct => ct.singularName === controller,
+            )
+            if (!hasContentType) {
+                apis.push(
+                    this.resolveStandaloneNames(controller, routes, schema),
+                )
+            }
+        }
+        return apis
+    }
+
     private buildStandaloneDeclarations(
         schema: ParsedSchema,
         parsedRoutes?: ParsedRoutes,
     ): string {
-        if (!parsedRoutes) return ''
-
-        const declarations: string[] = []
-        for (const [controller, routes] of parsedRoutes.byController) {
-            if (controller === 'auth' || controller === 'user') continue
-
-            const hasContentType = schema.contentTypes.some(
-                ct => ct.singularName === controller,
-            )
-
-            if (!hasContentType) {
-                const { className, propName } = this.resolveStandaloneNames(
-                    controller,
-                    routes,
-                    schema,
-                )
-                declarations.push(`  ${propName}: ${className}`)
-            }
-        }
-
-        return declarations.join('\n')
+        return this.standaloneApis(schema, parsedRoutes)
+            .map(({ className, propName }) => `  ${propName}: ${className}`)
+            .join('\n')
     }
 
     private buildStandaloneInits(
         schema: ParsedSchema,
         parsedRoutes?: ParsedRoutes,
     ): string {
-        if (!parsedRoutes) return ''
-
-        const inits: string[] = []
-        for (const [controller, routes] of parsedRoutes.byController) {
-            if (controller === 'auth' || controller === 'user') continue
-
-            const hasContentType = schema.contentTypes.some(
-                ct => ct.singularName === controller,
-            )
-
-            if (!hasContentType) {
-                const { className, propName } = this.resolveStandaloneNames(
-                    controller,
-                    routes,
-                    schema,
-                )
-                inits.push(
+        return this.standaloneApis(schema, parsedRoutes)
+            .map(
+                ({ className, propName }) =>
                     `    this.${propName} = new ${className}(this.config)`,
-                )
-            }
-        }
+            )
+            .join('\n')
+    }
 
-        return inits.join('\n')
+    // Every StrapiClient member name, so plugin-route properties can steer clear
+    private clientMemberNames(
+        schema: ParsedSchema,
+        parsedRoutes: ParsedRoutes | undefined,
+        activePlugins: typeof PLUGIN_REGISTRY,
+    ): Set<string> {
+        const names = new Set([
+            'config',
+            'constructor',
+            'setToken',
+            'validateSchema',
+        ])
+        if (hasUsersPermissions(schema)) {
+            names.add('auth')
+            names.add('authentication')
+        }
+        for (const ct of schema.contentTypes) {
+            names.add(
+                this.contentTypePropName(
+                    ct.kind === 'single' ? ct.singularName : ct.pluralName,
+                    ct.kind,
+                ),
+            )
+        }
+        for (const { propName } of this.standaloneApis(schema, parsedRoutes)) {
+            names.add(propName)
+        }
+        for (const contract of activePlugins) names.add(contract.clientProperty)
+        return names
     }
 }

@@ -258,3 +258,19 @@ The plugin reads `Endpoints` with the TypeScript compiler, so any type syntax wo
 - Comments are not carried into the generated types.
 
 For the generate / watch / commit workflow, see the [CLI reference](/guide/cli).
+
+## Routes of other plugins
+
+Content-API routes that installed plugins add — `strapi-plugin-navigation`'s `/api/navigation/render/:idOrSlug`, a comments plugin, `@strapi/email` — get one class per plugin on the client, named after the plugin:
+
+```typescript
+const menu = await strapi.navigation.render<NavItem[]>('main', { type: 'TREE' })
+await strapi.navigation.renderChild('main', 'footer')
+```
+
+- **Method names** are the route's action. When two controllers of a plugin share an action, both are prefixed with their controller (`clientFind`, `adminFind`). A plugin whose name is already taken on the client gets a `Plugin` suffix (`itemsPlugin`).
+- **Path parameters** become positional `string` arguments and are URL-encoded. Query parameters go in `params`, the body (POST/PUT/PATCH) in `data`, as JSON or `FormData`.
+- **Responses are returned as the plugin sends them** — no `data` unwrapping, since plugins don't share Strapi's envelope. A non-JSON response (a sitemap, a health check) comes back as a string.
+- **Types come from the route's own schemas.** Strapi 5.20+ lets a route declare Zod `request` and `response` schemas; when a plugin does, the query, body and response are typed from them. Most third-party plugins don't declare any yet, so their responses are `unknown` — pass the type you expect as the type argument, as above. Path parameters are always typed.
+
+users-permissions keeps its own API (`strapi.auth` and the classes generated for its routes so far), and upload and i18n have [built-in typed APIs](/reference/api). Routes whose path is a regular expression (`/connect/(.*)`) are skipped, as no URL can be built for them.

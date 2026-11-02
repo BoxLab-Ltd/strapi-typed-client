@@ -15,6 +15,10 @@ import type {
     ExtraControllerType,
     EndpointsResponse,
 } from '../../../../shared/endpoint-types.js'
+import {
+    jsonSchemaToTs,
+    safeKey,
+} from '../../../../shared/json-schema-to-ts.js'
 
 export type {
     EndpointType,
@@ -33,6 +37,12 @@ interface StrapiRoute {
         middlewares?: string[]
         prefix?: string
     }
+    // Zod 4 schemas, attached by Strapi >= 5.20 and by plugins that opt in
+    request?: {
+        query?: Record<string, unknown>
+        body?: Record<string, unknown>
+    }
+    response?: unknown
 }
 
 interface StrapiApiEntry {
@@ -199,6 +209,105 @@ function findControllerFile(
     }
 
     return null
+}
+
+// Plugins the client already covers with its own API, and this plugin's schema route
+const PLUGINS_WITH_OWN_API = new Set([
+    'users-permissions',
+    'upload',
+    'i18n',
+    'strapi-typed-client',
+])
+
+const HTTP_METHODS = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE'])
+
+interface PluginRouter {
+    type?: string
+    prefix?: string
+    routes?: StrapiRoute[]
+}
+
+// Mirrors Strapi's own registration: a bare array is admin-only, a router defaults to
+// type 'admin' and prefix `/<plugin>`. Matching on `type`, not the key, catches
+// content-api routers registered under another name.
+function contentApiRouters(
+    routes: unknown,
+    pluginName: string,
+): { prefix: string; routes: StrapiRoute[] }[] {
+    if (!routes || typeof routes !== 'object' || Array.isArray(routes))
+        return []
+    const routers: { prefix: string; routes: StrapiRoute[] }[] = []
+    for (const [key, value] of Object.entries(routes)) {
+        const router: PluginRouter | undefined = Array.isArray(value)
+            ? { routes: value as StrapiRoute[] }
+            : (value as PluginRouter | undefined)
+        const type =
+            router?.type ?? (key === 'content-api' ? 'content-api' : 'admin')
+        if (type !== 'content-api' || !Array.isArray(router?.routes)) continue
+        routers.push({
+            prefix: router.prefix ?? `/${pluginName}`,
+            routes: router.routes,
+        })
+    }
+    return routers
+}
+
+// Same precedence as Strapi: a route's own `config.prefix` (even '') beats the router's
+function pluginRoutePath(route: StrapiRoute, routerPrefix: string): string {
+    const prefix =
+        route.config &&
+        Object.prototype.hasOwnProperty.call(route.config, 'prefix')
+            ? (route.config.prefix ?? '')
+            : routerPrefix
+    return (
+        `${prefix}${route.path}`.replace(/\/+/g, '/').replace(/\/$/, '') || '/'
+    )
+}
+
+interface ZodLike {
+    toJSONSchema?: (params: object) => unknown
+    safeParse?: (value: unknown) => { success: boolean }
+}
+
+function schemaToTs(
+    schema: unknown,
+    io: 'input' | 'output',
+): string | undefined {
+    const zod = schema as ZodLike | undefined
+    if (typeof zod?.toJSONSchema !== 'function') return undefined
+    try {
+        const type = jsonSchemaToTs(
+            zod.toJSONSchema({ io, unrepresentable: 'any' }),
+        )
+        return type === 'unknown' ? undefined : type
+    } catch {
+        return undefined
+    }
+}
+
+function acceptsUndefined(schema: unknown): boolean {
+    try {
+        return (schema as ZodLike).safeParse?.(undefined).success === true
+    } catch {
+        return false
+    }
+}
+
+function routeSchemaTypes(route: StrapiRoute): EndpointType | undefined {
+    const types: EndpointType = {}
+    const query = route.request?.query
+    if (query && typeof query === 'object') {
+        const members = Object.entries(query).map(
+            ([name, schema]) =>
+                `${safeKey(name)}${acceptsUndefined(schema) ? '?' : ''}: ${schemaToTs(schema, 'input') ?? 'unknown'}`,
+        )
+        if (members.length > 0) types.query = `{ ${members.join('; ')} }`
+    }
+    const body = schemaToTs(route.request?.body?.['application/json'], 'input')
+    if (body) types.body = body
+    const response = schemaToTs(route.response, 'output')
+    if (response) types.response = response
+    return Object.keys(types).length > 0 ? types : undefined
 }
 
 export default ({ strapi }: { strapi: any }) => {
@@ -472,6 +581,7 @@ export default ({ strapi }: { strapi: any }) => {
                         fromFiles.endpoints,
                         'users-permissions',
                     )
+                    this.extractOtherPluginRoutes(fromFiles.endpoints)
 
                     return {
                         endpoints: fromFiles.endpoints,
@@ -482,6 +592,7 @@ export default ({ strapi }: { strapi: any }) => {
 
                 // Even with no API routes, extract plugin routes
                 this.extractPluginRoutes(endpoints, 'users-permissions')
+                this.extractOtherPluginRoutes(endpoints)
                 if (endpoints.length > 0) {
                     const extraTypes = await this.extractExtraTypes(strapiDir)
                     return {
@@ -637,6 +748,7 @@ export default ({ strapi }: { strapi: any }) => {
 
             // Extract routes from users-permissions plugin
             this.extractPluginRoutes(endpoints, 'users-permissions')
+            this.extractOtherPluginRoutes(endpoints)
 
             // Sort endpoints by path for consistent output
             endpoints.sort((a, b) => {
@@ -712,6 +824,57 @@ export default ({ strapi }: { strapi: any }) => {
                 strapi.log.debug(
                     `[strapi-types] Error extracting plugin routes for ${pluginName}: ${error}`,
                 )
+            }
+        },
+
+        /**
+         * Content-API routes of every other installed plugin (e.g. navigation's
+         * `/render/:idOrSlug`). The path is final — prefix already applied, hence
+         * `prefix: ''` — and the types come from the route's Zod schemas when
+         * the plugin declares them.
+         */
+        extractOtherPluginRoutes(endpoints: ParsedEndpoint[]): void {
+            for (const pluginName of Object.keys(strapi.plugins ?? {}).sort()) {
+                if (PLUGINS_WITH_OWN_API.has(pluginName)) continue
+                let routers: ReturnType<typeof contentApiRouters>
+                try {
+                    routers = contentApiRouters(
+                        strapi.plugin(pluginName)?.routes,
+                        pluginName,
+                    )
+                } catch (error) {
+                    strapi.log.debug(
+                        `[strapi-types] Error reading routes of plugin ${pluginName}: ${error}`,
+                    )
+                    continue
+                }
+                for (const router of routers) {
+                    for (const route of router.routes) {
+                        const method = String(route.method ?? '').toUpperCase()
+                        if (
+                            typeof route.handler !== 'string' ||
+                            typeof route.path !== 'string' ||
+                            !HTTP_METHODS.has(method)
+                        ) {
+                            continue
+                        }
+                        const handler = route.handler.includes('::')
+                            ? route.handler
+                            : `plugin::${pluginName}.${route.handler}`
+                        const { controller, action } = parseHandler(handler)
+                        const types = routeSchemaTypes(route)
+                        endpoints.push({
+                            method,
+                            path: pluginRoutePath(route, router.prefix),
+                            handler,
+                            controller,
+                            action,
+                            pluginName,
+                            prefix: '',
+                            ...(types && { types }),
+                        })
+                    }
+                }
             }
         },
 
