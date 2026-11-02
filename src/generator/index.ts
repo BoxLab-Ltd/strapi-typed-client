@@ -11,6 +11,9 @@ import { resolveZod } from './zod-resolution.js'
 import {
     VALIDATION_FILE_MARKER,
     isGeneratedValidationFile,
+    isGeneratedTypesFile,
+    GENERATED_TYPES_HEADER,
+    SPLIT_TYPES_DIR,
     validationFileNames,
     type ValidationMode,
 } from '../shared/client-header.js'
@@ -36,6 +39,8 @@ export interface GenerateOptions {
     typecheck?: boolean
     authMode?: AuthMode
     validation?: ValidationMode
+    /** One file per collection and component category instead of a single types file. */
+    splitTypes?: boolean
 }
 
 export class Generator {
@@ -62,6 +67,7 @@ export class Generator {
             typecheck = true,
             authMode = 'legacy',
             validation = 'none',
+            splitTypes = false,
         }: GenerateOptions = {},
     ): Promise<void> {
         // Fail before any work: a missing zod or a foreign validation file must
@@ -74,7 +80,9 @@ export class Generator {
             : {}
 
         // Generate all source contents
-        const typesContent = this.typesGenerator.generate(schema)
+        const typesFiles = splitTypes
+            ? this.typesGenerator.generateSplit(schema)
+            : { 'types.ts': this.typesGenerator.generate(schema) }
         const clientContent = this.clientGenerator.generate(
             schema,
             endpoints,
@@ -87,11 +95,14 @@ export class Generator {
         const indexContent = this.indexGenerator.generate()
 
         // Format all files with prettier
-        const files: Record<string, string> = {
-            'types.ts': await this.formatContent(typesContent),
+        const files: Record<string, string> = {}
+        for (const [name, content] of Object.entries(typesFiles)) {
+            files[name] = await this.formatContent(content)
+        }
+        Object.assign(files, {
             'client.ts': await this.formatContent(clientContent),
             'index.ts': await this.formatContent(indexContent),
-        }
+        })
         if (validation === 'zod') {
             files['validation.ts'] = await this.formatContent(
                 new ValidationGenerator().generate(schema),
@@ -113,17 +124,18 @@ export class Generator {
             // Type-check the exact bytes we're about to write, BEFORE touching
             // the consumer's tree — a guard throw must leave it untouched.
             this.verifyGeneratedTypes(strippedFiles, typecheck, moduleOptions)
-            this.ensureOutputDir()
             for (const [fileName, data] of Object.entries(strippedFiles)) {
-                fs.writeFileSync(
-                    path.join(this.outputDir, fileName),
-                    data,
-                    'utf-8',
-                )
+                this.writeIfChanged(fileName, data)
             }
+            this.removeStaleTypesFiles(Object.keys(strippedFiles))
         } else {
             // Compile all files together so cross-file imports resolve correctly
-            await this.compileFiles(files, typecheck, moduleOptions)
+            const written = await this.compileFiles(
+                files,
+                typecheck,
+                moduleOptions,
+            )
+            this.removeStaleTypesFiles(written)
         }
 
         this.removeStaleValidationFiles(format, validation)
@@ -165,10 +177,64 @@ export class Generator {
         }
     }
 
-    private ensureOutputDir(): void {
-        if (!fs.existsSync(this.outputDir)) {
-            fs.mkdirSync(this.outputDir, { recursive: true })
+    // Skips identical content so an unchanged collection keeps its mtime — the
+    // point of splitting is that a schema change touches only the files it affects
+    private writeIfChanged(relPath: string, data: string): void {
+        const file = path.join(this.outputDir, relPath)
+        try {
+            if (fs.readFileSync(file, 'utf-8') === data) return
+        } catch {
+            /* new file */
         }
+        fs.mkdirSync(path.dirname(file), { recursive: true })
+        fs.writeFileSync(file, data, 'utf-8')
+    }
+
+    // Split output leaves files behind when a collection disappears or the mode
+    // flips back to a single file. Only files carrying the generated header go,
+    // so a consumer's own `base.ts` or `collections/` content survives.
+    private removeStaleTypesFiles(written: string[]): void {
+        const keep = new Set(written.map(f => path.normalize(f)))
+        const candidates: string[] = []
+        const walk = (dir: string): void => {
+            let entries: fs.Dirent[]
+            try {
+                entries = fs.readdirSync(dir, { withFileTypes: true })
+            } catch {
+                return
+            }
+            for (const entry of entries) {
+                const full = path.join(dir, entry.name)
+                if (entry.isDirectory()) walk(full)
+                else candidates.push(path.relative(this.outputDir, full))
+            }
+        }
+        walk(path.join(this.outputDir, SPLIT_TYPES_DIR))
+        for (const ext of ['ts', 'js', 'd.ts']) candidates.push(`base.${ext}`)
+
+        for (const rel of candidates) {
+            if (!/\.(ts|js)$/.test(rel) || keep.has(path.normalize(rel))) {
+                continue
+            }
+            const file = path.join(this.outputDir, rel)
+            if (fs.existsSync(file) && isGeneratedTypesFile(file)) {
+                fs.rmSync(file)
+            }
+        }
+        // Drop directories the cleanup emptied
+        const prune = (dir: string): void => {
+            let entries: fs.Dirent[]
+            try {
+                entries = fs.readdirSync(dir, { withFileTypes: true })
+            } catch {
+                return
+            }
+            for (const entry of entries) {
+                if (entry.isDirectory()) prune(path.join(dir, entry.name))
+            }
+            if (fs.readdirSync(dir).length === 0) fs.rmdirSync(dir)
+        }
+        prune(path.join(this.outputDir, SPLIT_TYPES_DIR))
     }
 
     private async formatContent(content: string): Promise<string> {
@@ -191,7 +257,7 @@ export class Generator {
         files: Record<string, string>,
         typecheck: boolean,
         moduleOptions: ts.CompilerOptions,
-    ): Promise<void> {
+    ): Promise<string[]> {
         const compilerOptions: ts.CompilerOptions = {
             ...moduleOptions,
             target: ts.ScriptTarget.ES2022,
@@ -261,17 +327,21 @@ export class Generator {
         }
 
         // Write output files
-        this.ensureOutputDir()
         for (const [fileName, data] of Object.entries(outputs)) {
-            const outputPath = path.join(this.outputDir, fileName)
             // tsc drops the leading comment from declarations; the marker is what
             // lets a later run recognise this file as ours
-            const content =
-                fileName === 'validation.d.ts'
-                    ? `${VALIDATION_FILE_MARKER}\n${data}`
-                    : data
-            fs.writeFileSync(outputPath, content, 'utf-8')
+            let content = data
+            if (fileName === 'validation.d.ts') {
+                content = `${VALIDATION_FILE_MARKER}\n${data}`
+            } else if (fileName.endsWith('.d.ts')) {
+                const source = files[fileName.replace(/\.d\.ts$/, '.ts')]
+                if (source?.includes(GENERATED_TYPES_HEADER)) {
+                    content = `${GENERATED_TYPES_HEADER}\n${data}`
+                }
+            }
+            this.writeIfChanged(fileName, content)
         }
+        return Object.keys(outputs)
     }
 
     /**
@@ -309,7 +379,9 @@ export class Generator {
         )
         try {
             for (const [name, content] of Object.entries(files)) {
-                fs.writeFileSync(path.join(checkDir, name), content, 'utf-8')
+                const target = path.join(checkDir, name)
+                fs.mkdirSync(path.dirname(target), { recursive: true })
+                fs.writeFileSync(target, content, 'utf-8')
             }
             const rootNames = Object.keys(files).map(n =>
                 path.join(checkDir, n),

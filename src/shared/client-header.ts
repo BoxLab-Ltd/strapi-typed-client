@@ -109,3 +109,26 @@ export function isGeneratedValidationFile(filePath: string): boolean {
     const head = readFileHead(filePath, VALIDATION_FILE_MARKER.length + 4)
     return head !== null && head.trimStart().startsWith(VALIDATION_FILE_MARKER)
 }
+
+/** Line of the `types` barrel that marks split output — a plain `base.ts` may be the consumer's own. */
+export const SPLIT_TYPES_MARKER = '// Split into per-collection files'
+
+const TYPES_FILES = ['types.ts', 'types.js'] as const
+
+/** True when `types` in the output dir is the barrel of split (per-collection) output. */
+export function isSplitTypesOutput(outputDir: string): boolean {
+    return TYPES_FILES.some(file => {
+        const head = readFileHead(path.join(outputDir, file), 512)
+        return head !== null && head.includes(SPLIT_TYPES_MARKER)
+    })
+}
+
+/** Directories holding split output; only files carrying the generated header are ours to delete. */
+export const SPLIT_TYPES_DIR = 'collections'
+export const GENERATED_TYPES_HEADER =
+    '// Auto-generated TypeScript types from Strapi schema'
+
+export function isGeneratedTypesFile(filePath: string): boolean {
+    const head = readFileHead(filePath, 256)
+    return head !== null && head.includes(GENERATED_TYPES_HEADER)
+}

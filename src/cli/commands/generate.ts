@@ -18,6 +18,7 @@ import {
     detectOutputFormat,
     hasMixedFormatOutput,
     readValidationMode,
+    isSplitTypesOutput,
     validationFileNames,
     type ValidationMode,
 } from '../../shared/client-header.js'
@@ -32,6 +33,8 @@ export interface GenerateOptions {
     format?: 'js' | 'ts'
     typecheck?: boolean
     validation?: ValidationMode
+    /** Split types into per-collection files. Defaults to the layout already in --output, else a single file. */
+    splitTypes?: boolean
 }
 
 const dim = (s: string): string => `\x1b[2m${s}\x1b[0m`
@@ -58,6 +61,8 @@ export function isGeneratedOutputFresh(params: {
     allFilesExist: boolean
     localValidation?: ValidationMode | null
     validation?: ValidationMode
+    localSplitTypes?: boolean
+    splitTypes?: boolean
 }): boolean {
     const { localHash, remoteHash, localVersion, cliVersion, allFilesExist } =
         params
@@ -67,6 +72,7 @@ export function isGeneratedOutputFresh(params: {
     if ((params.localValidation ?? 'none') !== (params.validation ?? 'none')) {
         return false
     }
+    if (!!params.localSplitTypes !== !!params.splitTypes) return false
     return true
 }
 
@@ -74,6 +80,7 @@ export function isGeneratedOutputFresh(params: {
 export function generatedFileNames(
     format: 'js' | 'ts',
     validation: ValidationMode,
+    splitTypes = false,
 ): string[] {
     const base =
         format === 'ts'
@@ -86,9 +93,14 @@ export function generatedFileNames(
                   'index.js',
                   'index.d.ts',
               ]
-    return validation === 'zod'
-        ? [...base, ...validationFileNames(format)]
-        : base
+    // Per-collection files depend on the schema, so only the fixed ones are listed
+    const split = splitTypes
+        ? format === 'ts'
+            ? ['base.ts']
+            : ['base.js', 'base.d.ts']
+        : []
+    const all = [...base, ...split]
+    return validation === 'zod' ? [...all, ...validationFileNames(format)] : all
 }
 
 /**
@@ -107,6 +119,8 @@ export async function generate(
         const localValidation = readValidationMode(outputDir)
         const validation: ValidationMode =
             options.validation ?? localValidation ?? 'none'
+        const localSplitTypes = isSplitTypesOutput(outputDir)
+        const splitTypes = options.splitTypes ?? localSplitTypes
 
         if (!options.silent && hasMixedFormatOutput(outputDir)) {
             console.log(
@@ -133,9 +147,11 @@ export async function generate(
             const cliVersion = getGeneratorVersion()
 
             // Verify generated files actually exist (they may be lost after package update)
-            const generatedFiles = generatedFileNames(format, validation).map(
-                f => path.join(outputDir, f),
-            )
+            const generatedFiles = generatedFileNames(
+                format,
+                validation,
+                splitTypes,
+            ).map(f => path.join(outputDir, f))
             const allFilesExist = generatedFiles.every(f => fs.existsSync(f))
 
             if (localHash && allFilesExist) {
@@ -155,6 +171,8 @@ export async function generate(
                             allFilesExist,
                             localValidation,
                             validation,
+                            localSplitTypes,
+                            splitTypes,
                         })
                     ) {
                         if (!options.silent) {
@@ -174,6 +192,13 @@ export async function generate(
                         if (localHash !== remoteHash) {
                             console.log(
                                 `Schema changed (${localHash.substring(0, 8)}... -> ${remoteHash.substring(0, 8)}...)`,
+                            )
+                        } else if (
+                            localVersion === cliVersion &&
+                            localSplitTypes !== splitTypes
+                        ) {
+                            console.log(
+                                `Types layout changed (${localSplitTypes ? 'split' : 'single file'} -> ${splitTypes ? 'split' : 'single file'}), regenerating...`,
                             )
                         } else if (localVersion === cliVersion) {
                             console.log(
@@ -257,9 +282,10 @@ export async function generate(
             typecheck: options.typecheck ?? true,
             authMode: authMode ?? 'legacy',
             validation,
+            splitTypes,
         })
 
-        for (const f of generatedFileNames(format, validation)) {
+        for (const f of generatedFileNames(format, validation, splitTypes)) {
             filesWritten.push(path.join(outputDir, f))
         }
 
@@ -296,6 +322,8 @@ interface GenerateCliOptions {
     format?: string
     typecheck?: boolean
     validation?: string
+    splitTypes?: boolean
+    singleFile?: boolean
 }
 
 /**
@@ -331,7 +359,18 @@ export function createGenerateCommand(program: Command): void {
             '--validation <zod|none>',
             'Also generate Zod validators for create/update inputs (needs zod 4 installed). Defaults to the mode already in --output, else none',
         )
+        .option(
+            '--split-types',
+            'Write one types file per collection and component category (base.ts + collections/) instead of a single types.ts. Defaults to the layout already in --output',
+        )
+        .option('--single-file', 'Write a single types.ts (undo --split-types)')
         .action(async (opts: GenerateCliOptions) => {
+            if (opts.splitTypes && opts.singleFile) {
+                console.error(
+                    '--split-types and --single-file cannot be used together.',
+                )
+                process.exit(1)
+            }
             if (opts.format && opts.format !== 'js' && opts.format !== 'ts') {
                 console.error(
                     `Invalid --format value: ${opts.format}. Expected 'js' or 'ts'.`,
@@ -354,6 +393,11 @@ export function createGenerateCommand(program: Command): void {
                 format: opts.format as 'js' | 'ts' | undefined,
                 typecheck: opts.typecheck,
                 validation: opts.validation,
+                splitTypes: opts.splitTypes
+                    ? true
+                    : opts.singleFile
+                      ? false
+                      : undefined,
             })
 
             if (!result.success) {
