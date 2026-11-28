@@ -5,6 +5,8 @@ export interface CustomEndpointType {
     handler: string // e.g., 'team-invitation.create'
     inputType?: string // e.g., 'TeamInvitationAPI.CreateRequest'
     outputType?: string // e.g., 'TeamInvitationAPI.CreateResponse'
+    queryType?: string // e.g., 'DirectoryAPI.ListQuery'
+    queryRequired?: boolean // declared query has a required key
     responseEnvelope?: boolean // declared response was `{ data: outputType }`
 }
 

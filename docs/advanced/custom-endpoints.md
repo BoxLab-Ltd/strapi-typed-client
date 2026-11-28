@@ -123,15 +123,30 @@ function buildCheckout(): CheckoutAPI.BuyPlanRequest {
 
 ## Field reference
 
-Each action in `Endpoints` is read for exactly two fields:
+Each action in `Endpoints` is read for three fields:
 
-| Field      | Effect                                                                              |
-| ---------- | ----------------------------------------------------------------------------------- |
-| `body`     | Request body type. Becomes the `data?` argument on POST/PUT/PATCH methods.          |
-| `response` | Response type. A single top-level `{ data: ... }` wrapper is unwrapped (see below). |
+| Field      | Effect                                                                                           |
+| ---------- | ------------------------------------------------------------------------------------------------ |
+| `body`     | Request body type. Becomes the `data?` argument on POST/PUT/PATCH methods.                       |
+| `query`    | Query string type. Adds a `params` argument, serialized like the CRUD methods' query parameters. |
+| `response` | Response type. A single top-level `{ data: ... }` wrapper is unwrapped (see below).              |
 
-::: warning `params` and `query` are not wired up
-You may see `params` / `query` in older examples, but the generator **parses and then discards them** — they have no effect on the generated method today. Path parameters come from the route (`:id`), and query strings are not typed. Don't rely on declaring them.
+```typescript
+export interface Endpoints {
+    list: {
+        query: { region?: string; area?: string }
+        response: { data: Listing[]; meta: { total: number } }
+    }
+}
+
+// GET /api/directory?region=north
+const { data, meta } = await strapi.directory.list({ region: 'north' })
+```
+
+`params` is optional unless the declared query has a required key. A method without a declared `query` keeps its signature, so declaring one is the only change to existing call sites.
+
+::: warning `params` is not wired up
+You may see `params` in older examples, but the generator **parses and then discards it**. Path parameters come from the route (`:id`).
 :::
 
 ## Response unwrapping
@@ -152,6 +167,7 @@ Only an object whose **sole** top-level member is `data` is unwrapped; siblings 
 - **Path parameters** become positional `string` arguments, in path order. `/teams/:teamId/members/:memberId` → `getMember(teamId: string, memberId: string)`.
 - **POST / PUT / PATCH** get a trailing `data?: <Body> | FormData` argument.
 - **GET / DELETE** take no body argument.
+- A declared `query` adds a `params` argument after the body. When it has a required key, the body before it becomes required too, so pass `undefined` if the route takes none.
 - The return is always `Promise<<Response>>`, unwrapped.
 - Without an `Endpoints` entry the method is still generated, but input and output fall back to `any`.
 

@@ -212,6 +212,7 @@ export function convertEndpointsToCustomTypes(
                 if (!endpoint.types) continue
                 const ap = toPascalCasePreserve(endpoint.action)
                 if (endpoint.types.body) ownNames.add(`${ap}Request`)
+                if (endpoint.types.query) ownNames.add(`${ap}Query`)
                 if (endpoint.types.response) ownNames.add(`${ap}Response`)
             }
         }
@@ -245,6 +246,21 @@ export function convertEndpointsToCustomTypes(
                         handler: endpoint.handler,
                     }
                     existing.inputType = `${namespaceName}.${typeName}`
+                    types.set(endpoint.handler, existing)
+                }
+
+                if (endpoint.types.query) {
+                    const typeName = `${actionPascal}Query`
+                    namespaceLines.push(
+                        `  export type ${typeName} = ${sanitizeTypeRefs(endpoint.types.query, nsKnown, unresolved)}`,
+                    )
+                    const existing = types.get(endpoint.handler) || {
+                        handler: endpoint.handler,
+                    }
+                    existing.queryType = `${namespaceName}.${typeName}`
+                    existing.queryRequired = hasRequiredMember(
+                        endpoint.types.query,
+                    )
                     types.set(endpoint.handler, existing)
                 }
 
@@ -291,6 +307,21 @@ export function convertEndpointsToCustomTypes(
     }
 
     return { types, typeDefinitions, namespaceImports }
+}
+
+// Only a type literal can be inspected; a named type stays optional, as it may well be all-optional
+export function hasRequiredMember(typeStr: string): boolean {
+    const source = ts.createSourceFile(
+        'query.ts',
+        `type Q = ${typeStr.trim()}`,
+        ts.ScriptTarget.Latest,
+    )
+    const alias = source.statements[0]
+    if (!alias || !ts.isTypeAliasDeclaration(alias)) return false
+    if (!ts.isTypeLiteralNode(alias.type)) return false
+    return alias.type.members.some(
+        m => ts.isPropertySignature(m) && !m.questionToken,
+    )
 }
 
 /**

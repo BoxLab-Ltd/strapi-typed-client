@@ -96,14 +96,22 @@ export class CustomApiGenerator {
         ) {
             methodName = methodName + toPascalCase(contentTypeName)
         }
-        const params = this.generateMethodParams(route, inputType)
+        const params = this.generateMethodParams(
+            route,
+            inputType,
+            customType?.queryType,
+            customType?.queryRequired,
+        )
         const hasBody =
             route.method === 'POST' ||
             route.method === 'PUT' ||
             route.method === 'PATCH'
 
         // route.path is the full path under /api; Strapi does not mount custom routes below the collection endpoint
-        const urlExpression = `\`\${this.config.baseURL}/api${this.generatePathExpression(route)}\``
+        const queryExpression = customType?.queryType
+            ? '${this.buildQueryString(params)}'
+            : ''
+        const urlExpression = `\`\${this.config.baseURL}/api${this.generatePathExpression(route)}${queryExpression}\``
 
         // An undeclared response keeps the historical `.data` unwrap.
         const unwrapData =
@@ -142,6 +150,8 @@ ${bodyBlock}
     private generateMethodParams(
         route: ParsedRoute,
         inputType: string = 'any',
+        queryType?: string,
+        queryRequired: boolean = false,
     ): string {
         const hasBody =
             route.method === 'POST' ||
@@ -150,8 +160,18 @@ ${bodyBlock}
 
         return buildMethodParams({
             pathParams: route.params,
-            // Support both typed data and FormData.
-            ...(hasBody ? { data: { type: `${inputType} | FormData` } } : {}),
+            // A required query can't follow an optional body, so the body becomes required with it
+            ...(hasBody
+                ? {
+                      data: {
+                          type: `${inputType} | FormData`,
+                          optional: !queryRequired,
+                      },
+                  }
+                : {}),
+            ...(queryType
+                ? { query: { type: queryType, optional: !queryRequired } }
+                : {}),
         })
     }
 
