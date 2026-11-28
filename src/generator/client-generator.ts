@@ -1868,16 +1868,11 @@ class UsersPermissionsUserAPI<
                         ? 'SingleTypeAPI'
                         : 'CollectionAPI'
                 const typeParams = this.buildTypeParams(contentType)
-                const endpoint =
-                    contentType.kind === 'single'
-                        ? contentType.singularName
-                        : contentType.pluralName
                 const customMethods =
                     this.customApiGenerator.generateCustomMethods(
                         controller,
                         routes,
                         false,
-                        endpoint,
                         contentType.cleanName,
                     )
 

@@ -752,7 +752,7 @@ describe('ClientGenerator', () => {
             const result = new ClientGenerator().generate(schema, endpoints)
 
             expect(result).toContain(
-                '`${this.config.baseURL}/api/${this.endpoint}/custom-action`',
+                '`${this.config.baseURL}/api/pesquisadores/custom-action`',
             )
             expect(result).not.toContain('/pesquisadoreses')
             expect(result).not.toContain('${this.endpoint}es/')
