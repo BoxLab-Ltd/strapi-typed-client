@@ -13,6 +13,7 @@ import { PLUGIN_REGISTRY } from './plugin-registry.js'
 import { STRAPI_ERROR_REGISTRY } from './strapi-error-registry.js'
 import {
     toCamelCase,
+    toIdentifier,
     toPascalCase,
     SCHEMA_API_PREFIX,
 } from '../shared/index.js'
@@ -2226,8 +2227,8 @@ ${pluginRoutesInitsBlock}
         }
 
         return {
-            className: toPascalCase(controller) + 'API',
-            propName: toCamelCase(controller),
+            className: toIdentifier(toPascalCase(controller)) + 'API',
+            propName: toIdentifier(toCamelCase(controller)),
         }
     }
 

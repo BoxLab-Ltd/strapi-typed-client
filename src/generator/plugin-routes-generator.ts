@@ -2,6 +2,7 @@ import type { ParsedEndpoint } from '../shared/endpoint-types.js'
 import {
     extractPathParams,
     toCamelCase,
+    toIdentifier,
     toPascalCase,
 } from '../shared/string-utils.js'
 import { buildMethodParams, buildRequestCall } from './method-signature.js'
@@ -61,12 +62,12 @@ export class PluginRoutesGenerator {
 
         const props = new Set(takenProps)
         return [...byPlugin.keys()].sort().map(pluginName => {
-            const base = toCamelCase(pluginName)
+            const base = toIdentifier(toCamelCase(pluginName))
             const propName = props.has(base) ? `${base}Plugin` : base
             props.add(propName)
             return {
                 pluginName,
-                className: `${toPascalCase(pluginName)}PluginAPI`,
+                className: `${toIdentifier(toPascalCase(pluginName))}PluginAPI`,
                 propName,
                 methods: this.nameMethods(byPlugin.get(pluginName)!),
             }
@@ -94,15 +95,15 @@ class PluginRoutesAPI extends BaseAPI {
         )
         const counts = new Map<string, number>()
         for (const e of sorted) {
-            const name = toCamelCase(e.action)
+            const name = toIdentifier(toCamelCase(e.action))
             counts.set(name, (counts.get(name) ?? 0) + 1)
         }
         const used = new Set<string>()
         return sorted.map(endpoint => {
-            const action = toCamelCase(endpoint.action)
+            const action = toIdentifier(toCamelCase(endpoint.action))
             let name =
                 counts.get(action)! > 1 || BASE_API_MEMBERS.has(action)
-                    ? toCamelCase(endpoint.controller) +
+                    ? toIdentifier(toCamelCase(endpoint.controller)) +
                       toPascalCase(endpoint.action)
                     : action
             if (used.has(name) || BASE_API_MEMBERS.has(name)) {

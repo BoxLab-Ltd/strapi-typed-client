@@ -10,7 +10,13 @@
  * toCamelCase('create_item') // 'createItem'
  */
 export function toCamelCase(str: string): string {
-    return str.replace(/[-_]([a-z])/g, (_, letter) => letter.toUpperCase())
+    return str.replace(/[-_]+([a-z0-9])/g, (_, c: string) => c.toUpperCase())
+}
+
+// Plugin and action names come from npm/Strapi, where `3d-viewer` or `foo.bar` are legal
+export function toIdentifier(str: string): string {
+    const cleaned = str.replace(/[^\w$]/g, '_')
+    return /^\d/.test(cleaned) ? `_${cleaned}` : cleaned
 }
 
 /**
@@ -31,7 +37,7 @@ export function toLowerFirst(str: string): string {
  */
 export function toPascalCase(str: string): string {
     return str
-        .split(/[-_]/)
+        .split(/[-_]+/)
         .map(part => part.charAt(0).toUpperCase() + part.slice(1))
         .join('')
 }

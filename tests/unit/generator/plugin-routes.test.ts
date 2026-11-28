@@ -56,6 +56,14 @@ const endpoints: ParsedEndpoint[] = [
     plugin('comments', 'GET', '/comments/moderation', 'admin.find'),
     plugin('comments', 'POST', '/comments/raw', 'client.request'),
     plugin('broken', 'GET', '/broken/(.*)', 'x.y'),
+    // Plugin names that don't camelCase into an identifier on their own (#118)
+    plugin(
+        'email-designer-5',
+        'GET',
+        '/email-designer-5/templates',
+        'designer.templates',
+    ),
+    plugin('3d-viewer', 'GET', '/3d-viewer/models', 'viewer.models'),
     // users-permissions keeps its controller-based classes
     {
         method: 'GET',
@@ -95,6 +103,8 @@ async function _assert() {
   await client.comments.adminFind()
   await client.comments.clientRequest({ any: 'body' })
   await client.role.find()
+  await client.emailDesigner5.templates()
+  await client._3dViewer.models()
 
   // @ts-expect-error - a route that can't be called gets no class
   void client.broken
@@ -162,6 +172,8 @@ describe('plugin routes (#101)', () => {
         expect(clientSource).toContain('export namespace EmailPluginAPI {')
         expect(clientSource).not.toContain('UsersPermissionsPluginAPI')
         expect(clientSource).not.toContain('BrokenPluginAPI')
+        expect(clientSource).toContain('class EmailDesigner5PluginAPI')
+        expect(clientSource).toContain('class _3dViewerPluginAPI')
     })
 
     async function clientWith(

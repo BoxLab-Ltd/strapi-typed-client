@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
     toCamelCase,
+    toIdentifier,
     toLowerFirst,
     toPascalCase,
     toPascalCasePreserve,
@@ -25,6 +26,25 @@ describe('string-utils', () => {
 
         it('handles already camelCase strings', () => {
             expect(toCamelCase('forgotPassword')).toBe('forgotPassword')
+        })
+
+        it('joins digits and repeated separators', () => {
+            expect(toCamelCase('email-designer-5')).toBe('emailDesigner5')
+            expect(toCamelCase('oauth2-client')).toBe('oauth2Client')
+            expect(toCamelCase('my--plugin')).toBe('myPlugin')
+            expect(toCamelCase('my__plugin')).toBe('myPlugin')
+        })
+    })
+
+    describe('toIdentifier', () => {
+        it('keeps valid identifiers as they are', () => {
+            expect(toIdentifier('emailDesigner5')).toBe('emailDesigner5')
+            expect(toIdentifier('_x$')).toBe('_x$')
+        })
+
+        it('guards a leading digit and replaces invalid characters', () => {
+            expect(toIdentifier('3dViewer')).toBe('_3dViewer')
+            expect(toIdentifier('foo.bar')).toBe('foo_bar')
         })
     })
 
@@ -51,6 +71,11 @@ describe('string-utils', () => {
 
         it('handles single word', () => {
             expect(toPascalCase('subscription')).toBe('Subscription')
+        })
+
+        it('joins digits and repeated separators', () => {
+            expect(toPascalCase('email-designer-5')).toBe('EmailDesigner5')
+            expect(toPascalCase('my--plugin')).toBe('MyPlugin')
         })
     })
 

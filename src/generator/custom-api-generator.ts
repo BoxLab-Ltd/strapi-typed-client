@@ -1,6 +1,10 @@
 import { ParsedRoute } from '../shared/route-types.js'
 import { ParsedCustomTypes } from '../shared/custom-types.js'
-import { toCamelCase, toPascalCase } from '../shared/string-utils.js'
+import {
+    toCamelCase,
+    toIdentifier,
+    toPascalCase,
+} from '../shared/string-utils.js'
 import { buildMethodParams, buildRequestCall } from './method-signature.js'
 
 /**
@@ -87,7 +91,7 @@ export class CustomApiGenerator {
         const customType = this.customTypes?.types.get(route.handler)
         const inputType = customType?.inputType || 'any'
         const outputType = customType?.outputType || 'any'
-        let methodName = toCamelCase(route.action)
+        let methodName = toIdentifier(toCamelCase(route.action))
         // On a content-type class, a custom action sharing a base CRUD name
         // would emit an incompatible override (TS2416) and hide the typed base
         // method, so mangle it (create -> createArticle). Standalone classes

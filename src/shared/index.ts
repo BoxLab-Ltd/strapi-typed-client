@@ -6,6 +6,7 @@
 // String manipulation utilities
 export {
     toCamelCase,
+    toIdentifier,
     toLowerFirst,
     toPascalCase,
     toKebabCase,

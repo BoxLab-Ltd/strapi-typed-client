@@ -268,6 +268,7 @@ const menu = await strapi.navigation.render<NavItem[]>('main', { type: 'TREE' })
 await strapi.navigation.renderChild('main', 'footer')
 ```
 
+- **Property names** are the plugin name in camelCase: `email-designer-5` becomes `strapi.emailDesigner5`, and a name starting with a digit gets a leading underscore (`3d-viewer` → `strapi._3dViewer`).
 - **Method names** are the route's action. When two controllers of a plugin share an action, both are prefixed with their controller (`clientFind`, `adminFind`). A plugin whose name is already taken on the client gets a `Plugin` suffix (`itemsPlugin`).
 - **Path parameters** become positional `string` arguments and are URL-encoded. Query parameters go in `params`, the body (POST/PUT/PATCH) in `data`, as JSON or `FormData`.
 - **Responses are returned as the plugin sends them** — no `data` unwrapping, since plugins don't share Strapi's envelope. A non-JSON response (a sitemap, a health check) comes back as a string.
